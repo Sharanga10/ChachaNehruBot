@@ -12,12 +12,13 @@ from transformers import pipeline
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from openai import OpenAI
 import tweepy
+from sarvam_utils import generate_with_sarvam
 
 # Debug Mode to verify secrets
 DEBUG_MODE = True
 if DEBUG_MODE:
     print("🔐 Debugging GitHub Secrets:")
-    keys = ["X_CONSUMER_KEY", "X_CONSUMER_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_SECRET", "XAI_API_KEY", "NEWS_API_KEY", "GOOGLE_API_KEY"]
+    keys = ["X_CONSUMER_KEY", "X_CONSUMER_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_SECRET", "XAI_API_KEY", "NEWS_API_KEY", "GOOGLE_API_KEY", "SARVAM_API_KEY"]
     for key in keys:
         print(f"{key}:", "✅" if os.environ.get(key) else "❌ MISSING")
 
@@ -29,6 +30,13 @@ X_ACCESS_SECRET = os.environ["X_ACCESS_SECRET"]
 XAI_API_KEY = os.environ["XAI_API_KEY"]
 NEWS_API_KEY = os.environ["NEWS_API_KEY"]
 GOOGLE_API_KEY = os.environ["GOOGLE_API_KEY"]
+SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY")
+
+# Load Model Config
+with open("model_config.json", "r") as f:
+    model_config = json.load(f)
+PRIMARY_MODEL = model_config["primary"]
+BACKUP_MODEL = model_config["backup"]
 
 # Logging Setup
 logging.basicConfig(filename='bot_logs.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -95,14 +103,31 @@ def audit_content(text, premise, query):
     return True, "Passed"
 
 def generate_content(prompt):
-    response = xai_client.chat.completions.create(
-        model="grok-4",
-        messages=[
-            {"role": "system", "content": "You are Chacha Nehru bot. Return JSON: {'text': content, 'inferred_prompt': inferred}."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return json.loads(response.choices[0].message.content)
+    try:
+        if PRIMARY_MODEL == "grok":
+            response = xai_client.chat.completions.create(
+                model="grok-4",
+                messages=[
+                    {"role": "system", "content": "You are Chacha Nehru bot. Return JSON: {'text': content, 'inferred_prompt': inferred}."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return json.loads(response.choices[0].message.content)
+        elif PRIMARY_MODEL == "sarvam":
+            return generate_with_sarvam(prompt, SARVAM_API_KEY)
+    except Exception as e:
+        logging.warning(f"Primary failed: {e}")
+        if BACKUP_MODEL == "sarvam":
+            return generate_with_sarvam(prompt, SARVAM_API_KEY)
+        elif BACKUP_MODEL == "grok":
+            response = xai_client.chat.completions.create(
+                model="grok-4",
+                messages=[
+                    {"role": "system", "content": "You are Chacha Nehru bot. Return JSON: {'text': content, 'inferred_prompt': inferred}."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return json.loads(response.choices[0].message.content)
 
 def save_to_dataset(prompt, tweet, metadata):
     with open('dataset.jsonl', 'a') as f:
