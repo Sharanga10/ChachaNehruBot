@@ -3,11 +3,12 @@ name: 🔁 Chacha Bot Auto Runner
 on:
   schedule:
     - cron: '0 3,9,14,18 * * *'  # 8:30 AM, 2:30 PM, 7:30 PM IST
-  workflow_dispatch:  # Manual run
+  workflow_dispatch:  # Manual run option
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+
     steps:
       - name: 📥 Clone repo
         uses: actions/checkout@v3
@@ -33,6 +34,7 @@ jobs:
           X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
           X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
