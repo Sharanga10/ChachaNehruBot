@@ -1,0 +1,8 @@
+torch
+transformers
+nltk
+tweepy
+openai
+pandas
+requests
+vaderSentiment
