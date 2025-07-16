@@ -1,5 +1,3 @@
-# main.py (Chacha Nehru Bot — Final Stable Version)
-
 import os
 import json
 import time
@@ -12,9 +10,12 @@ from transformers import pipeline
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from openai import OpenAI
 import tweepy
-from sarvam_utils import generate_with_sarvam
 
-# Debug Mode to verify secrets
+from sarvam_utils import generate_with_sarvam
+from chatgpt_refiner import refine_with_chatgpt
+from chatgpt_tracker import should_use_chatgpt, get_token_usage
+
+# Debugging API keys
 DEBUG_MODE = True
 if DEBUG_MODE:
     print("🔐 Debugging GitHub Secrets:")
@@ -22,7 +23,7 @@ if DEBUG_MODE:
     for key in keys:
         print(f"{key}:", "✅" if os.environ.get(key) else "❌ MISSING")
 
-# Load API Keys
+# Load keys
 X_CONSUMER_KEY = os.environ["X_CONSUMER_KEY"]
 X_CONSUMER_SECRET = os.environ["X_CONSUMER_SECRET"]
 X_ACCESS_TOKEN = os.environ["X_ACCESS_TOKEN"]
@@ -32,29 +33,29 @@ NEWS_API_KEY = os.environ["NEWS_API_KEY"]
 GOOGLE_API_KEY = os.environ["GOOGLE_API_KEY"]
 SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY")
 
-# Load Model Config
+# Load model preference
 with open("model_config.json", "r") as f:
     model_config = json.load(f)
 PRIMARY_MODEL = model_config["primary"]
 BACKUP_MODEL = model_config["backup"]
 
-# Logging Setup
+# Logging setup
 logging.basicConfig(filename='bot_logs.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 logs = {'content': [], 'audit': [], 'post': [], 'rpe': []}
 
-# X Client
+# Twitter Auth
 auth = tweepy.OAuth1UserHandler(X_CONSUMER_KEY, X_CONSUMER_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET)
 api = tweepy.API(auth)
 
-# XAI Client
+# X.AI
 xai_client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
-# NLP Setup
+# NLP Models
 nltk.download('punkt')
 fact_checker = pipeline("text-classification", model="roberta-large-mnli")
 sentiment_analyzer = SentimentIntensityAnalyzer()
 
-# Load Shlokas
+# Load shlokas
 with open('shlokas.json', 'r') as f:
     shlokas = json.load(f)
 
@@ -63,9 +64,7 @@ dialects = ['pure_hindi', 'bhojpuri', 'marathi', 'gujarati']
 def fetch_news():
     url = f"https://newsapi.org/v2/top-headlines?country=in&category=science&apiKey={NEWS_API_KEY}"
     response = requests.get(url)
-    articles = response.json().get('articles', [])[:5]
-    logging.info(f"Fetched {len(articles)} news items")
-    return articles
+    return response.json().get('articles', [])[:5]
 
 def google_fact_check(query):
     url = f"https://factchecktools.googleapis.com/v1alpha1/claims:search?query={query}&key={GOOGLE_API_KEY}&languageCode=hi"
@@ -113,21 +112,31 @@ def generate_content(prompt):
                 ]
             )
             return json.loads(response.choices[0].message.content)
+        elif PRIMARY_MODEL == "chatgpt":
+            from chatgpt_refiner import chatgpt_generate
+            return chatgpt_generate(prompt)
         elif PRIMARY_MODEL == "sarvam":
-            return generate_with_sarvam(prompt, SARVAM_API_KEY)
+            return generate_with_sarvam(prompt)
     except Exception as e:
         logging.warning(f"Primary failed: {e}")
-        if BACKUP_MODEL == "sarvam":
-            return generate_with_sarvam(prompt, SARVAM_API_KEY)
-        elif BACKUP_MODEL == "grok":
-            response = xai_client.chat.completions.create(
-                model="grok-4",
-                messages=[
-                    {"role": "system", "content": "You are Chacha Nehru bot. Return JSON: {'text': content, 'inferred_prompt': inferred}."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return json.loads(response.choices[0].message.content)
+        try:
+            if BACKUP_MODEL == "chatgpt" and should_use_chatgpt():
+                from chatgpt_refiner import chatgpt_generate
+                return chatgpt_generate(prompt)
+            elif BACKUP_MODEL == "sarvam":
+                return generate_with_sarvam(prompt)
+            elif BACKUP_MODEL == "grok":
+                response = xai_client.chat.completions.create(
+                    model="grok-4",
+                    messages=[
+                        {"role": "system", "content": "You are Chacha Nehru bot. Return JSON: {'text': content, 'inferred_prompt': inferred}."},
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            logging.error(f"Backup failed: {e}")
+            return {"text": "", "inferred_prompt": prompt}
 
 def save_to_dataset(prompt, tweet, metadata):
     with open('dataset.jsonl', 'a') as f:
@@ -153,7 +162,7 @@ def main():
         posts_today.append(result)
         save_to_dataset(result['inferred_prompt'], result['text'], {"type": "shloka", "dialect": "pure_hindi"})
 
-    # News Posts
+    # News Tweets
     for article in news:
         dialect = random.choice(dialects)
         prompt = f"Generate tweet on: {article['title']} — dialect: {dialect}"
@@ -172,16 +181,17 @@ def main():
         posts_today.append(result)
         save_to_dataset(result['inferred_prompt'], result['text'], {"type": "shloka", "dialect": "pure_hindi"})
 
-    # Post to X
+    # Post on X
     for post in posts_today[:15]:
         try:
             tweet = api.update_status(post['text'])
             logs['post'].append({"id": tweet.id, "text": post['text'], "time": time.strftime("%Y-%m-%d %H:%M:%S")})
-            time.sleep(2700)  # 45 mins
+            time.sleep(2700)  # 45 minutes
         except Exception as e:
             logging.error(f"Post error: {e}")
 
     update_dashboard()
+    print("📊 ChatGPT Usage:", get_token_usage())
 
 if __name__ == "__main__":
     main()

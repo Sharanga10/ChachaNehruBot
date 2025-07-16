@@ -1,4 +1,5 @@
 {
-  "primary": "grok",
-  "backup": "sarvam"
+  "primary": "grok-4",
+  "backup": "chatgpt",
+  "third": "sarvam"
 }
