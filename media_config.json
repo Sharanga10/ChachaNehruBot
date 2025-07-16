@@ -1,0 +1,8 @@
+{
+  "generate_images": false,
+  "generate_videos": false,
+  "image_generator_model": "dalle3",
+  "video_generator_model": "sora",
+  "image_style": "realistic",
+  "caption_format": "hindi_poetic"
+}

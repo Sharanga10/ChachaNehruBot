@@ -1,0 +1,8 @@
+{
+  "enable_news_tweets": true,
+  "enable_shloka_tweets": true,
+  "enable_image_generation": false,
+  "enable_video_generation": false,
+  "max_tweets_per_day": 50,
+  "enforce_exact_quota": true
+}

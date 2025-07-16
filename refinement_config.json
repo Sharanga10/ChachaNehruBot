@@ -1,0 +1,10 @@
+{
+  "use_chatgpt_refiner": true,
+  "refine_only_if_viral_potential": true,
+  "max_chatgpt_refinements_per_day": 20,
+  "token_limit_per_day": 15000,
+  "chatgpt_api_key_name": "CHATGPT_API_KEY",
+  "refinement_strategy": "selective",
+  "sentiment_threshold": 0.85,
+  "enable_rpe_dataset_building": true
+}
