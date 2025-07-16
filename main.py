@@ -138,7 +138,7 @@ def generate_content(prompt):
                 return json.loads(response.choices[0].message.content)
         except Exception as e:
             logging.error(f"Backup failed: {e}")
-            return None
+            return {"text": "", "inferred_prompt": prompt}
 
 def save_to_dataset(prompt, tweet, metadata):
     with open('dataset.jsonl', 'a') as f:
@@ -151,6 +151,15 @@ def update_dashboard():
     df.to_csv('post_log.csv', mode='a', index=False)
     logging.info("Dashboard updated")
 
+def process_and_save(result, premise, query, metadata):
+    if result and 'text' in result:
+        passed, reason = audit_content(result['text'], premise, query)
+        if passed:
+            logs['content'].append(result['text'])
+            save_to_dataset(result['inferred_prompt'], result['text'], metadata)
+            return result
+    return None
+
 def main():
     news = fetch_news()
     posts_today = []
@@ -159,11 +168,9 @@ def main():
     shloka = random.choice([s for s in shlokas if 'morning' in s['theme']])
     prompt = f"Morning shloka: {shloka['sanskrit']} — {shloka['hindi']}"
     result = generate_content(prompt)
-    if result:
-        passed, reason = audit_content(result['text'], shloka['hindi'], "India positive")
-        if passed:
-            posts_today.append(result)
-            save_to_dataset(result['inferred_prompt'], result['text'], {"type": "shloka", "dialect": "pure_hindi"})
+    final_result = process_and_save(result, shloka['hindi'], "India positive", {"type": "shloka", "dialect": "pure_hindi"})
+    if final_result:
+        posts_today.append(final_result)
     else:
         logging.warning("⚠️ Morning shloka generation failed.")
 
@@ -172,23 +179,17 @@ def main():
         dialect = random.choice(dialects)
         prompt = f"Generate tweet on: {article['title']} — dialect: {dialect}"
         result = generate_content(prompt)
-        if result:
-            passed, reason = audit_content(result['text'], article['description'], article['title'])
-            if passed:
-                posts_today.append(result)
-                save_to_dataset(result['inferred_prompt'], result['text'], {"dialect": dialect})
-        else:
-            logging.warning(f"⚠️ Failed to generate for article: {article['title']}")
+        final_result = process_and_save(result, article['description'], article['title'], {"dialect": dialect})
+        if final_result:
+            posts_today.append(final_result)
 
     # Evening Shloka
     shloka = random.choice([s for s in shlokas if 'evening' in s['theme']])
     prompt = f"Evening shloka: {shloka['sanskrit']} — {shloka['hindi']}"
     result = generate_content(prompt)
-    if result:
-        passed, reason = audit_content(result['text'], shloka['hindi'], "India positive")
-        if passed:
-            posts_today.append(result)
-            save_to_dataset(result['inferred_prompt'], result['text'], {"type": "shloka", "dialect": "pure_hindi"})
+    final_result = process_and_save(result, shloka['hindi'], "India positive", {"type": "shloka", "dialect": "pure_hindi"})
+    if final_result:
+        posts_today.append(final_result)
     else:
         logging.warning("⚠️ Evening shloka generation failed.")
 
