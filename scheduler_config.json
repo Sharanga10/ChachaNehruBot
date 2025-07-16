@@ -1,0 +1,13 @@
+{
+  "daily_tweet_quota": 50,
+  "grok_quota": 20,
+  "chatgpt_quota": 20,
+  "sarvam_quota": 10,
+  "tweet_gap_minutes": 30,
+  "active_hours": {
+    "start": "06:00",
+    "end": "23:30"
+  },
+  "enforce_exact_quota": true,
+  "timezone": "Asia/Kolkata"
+}

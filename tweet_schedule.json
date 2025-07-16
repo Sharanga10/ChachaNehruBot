@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "daily_limit": 50,
+  "schedule_blocks": [
+    {"start": "06:00", "end": "11:30", "max": 15},
+    {"start": "11:30", "end": "17:30", "max": 15},
+    {"start": "17:30", "end": "23:30", "max": 20}
+  ],
+  "spacing_seconds": 2700,
+  "force_even_distribution": false
+}

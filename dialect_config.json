@@ -1,0 +1,5 @@
+{
+  "enabled_dialects": ["pure_hindi", "bhojpuri", "marathi", "gujarati"],
+  "force_default": false,
+  "default_dialect": "pure_hindi"
+}
