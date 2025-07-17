@@ -25,10 +25,12 @@ jobs:
 
     - name: Run Chacha Nehru Bot
       env:
-        CHATGPT_API_KEY: ${{ secrets.CHATGPT_API_KEY }}
         X_API_KEY: ${{ secrets.X_API_KEY }}
         X_API_SECRET: ${{ secrets.X_API_SECRET }}
         X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
         X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        XAI_API_KEY: ${{ secrets.XAI_API_KEY }}         # ✅ Grok Key (Corrected)
+        CHATGPT_API_KEY: ${{ secrets.CHATGPT_API_KEY }} # ✅ ChatGPT fallback key
+        SARVAM_MODEL_PATH: ${{ secrets.SARVAM_MODEL_PATH }} # ✅ Local fallback model path if needed
       run: |
         python3 main.py
