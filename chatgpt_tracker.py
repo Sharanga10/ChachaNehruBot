@@ -1,31 +1,43 @@
-# chatgpt_tracker.py
+import os
+import csv
+from datetime import datetime
 
-USD_TO_INR = 84
-INPUT_COST_PER_1K = 0.0005  # USD
-OUTPUT_COST_PER_1K = 0.0015  # USD
-MAX_MONTHLY_INR = 100
+# Configuration
+CHATGPT_TOKEN_LIMIT = 100_000  # Monthly limit
+CHATGPT_COST_PER_1K = 1.5      # ₹ per 1000 tokens
 
-# Runtime counters
-chatgpt_input_tokens = 0
-chatgpt_output_tokens = 0
+# Log file path
+LOG_FILE = "chatgpt_usage_log.csv"
 
-def estimate_cost_inr(input_tokens, output_tokens):
-    input_usd = (input_tokens / 1000) * INPUT_COST_PER_1K
-    output_usd = (output_tokens / 1000) * OUTPUT_COST_PER_1K
-    return (input_usd + output_usd) * USD_TO_INR
+# Internal tracker
+monthly_total = 0
 
-def should_use_chatgpt():
-    cost = estimate_cost_inr(chatgpt_input_tokens, chatgpt_output_tokens)
-    return cost < MAX_MONTHLY_INR
+def track_tokens(prompt_tokens, completion_tokens):
+    global monthly_total
 
-def track_tokens(input_tokens, output_tokens):
-    global chatgpt_input_tokens, chatgpt_output_tokens
-    chatgpt_input_tokens += input_tokens
-    chatgpt_output_tokens += output_tokens
+    # Token and cost calculation
+    total_tokens = prompt_tokens + completion_tokens
+    cost = (total_tokens / 1000) * CHATGPT_COST_PER_1K
+    monthly_total += total_tokens
 
-def get_token_usage():
-    return {
-        "input_tokens": chatgpt_input_tokens,
-        "output_tokens": chatgpt_output_tokens,
-        "estimated_inr": estimate_cost_inr(chatgpt_input_tokens, chatgpt_output_tokens)
-    }
+    # Log data
+    now = datetime.now()
+    row = [
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        f"{cost:.2f}"
+    ]
+
+    # Create log file if not exists
+    file_exists = os.path.isfile(LOG_FILE)
+    with open(LOG_FILE, "a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["timestamp", "prompt_tokens", "completion_tokens", "total_tokens", "cost_inr"])
+        writer.writerow(row)
+
+    # Monthly limit warning
+    if monthly_total >= CHATGPT_TOKEN_LIMIT:
+        print("⚠️ CHATGPT token limit exceeded for the month!")
