@@ -1,22 +1,41 @@
-# chatgpt_refiner.py
+import os
+from openai import OpenAI
+from openai.types.chat import ChatCompletion
 
-import openai
-from chatgpt_tracker import track_tokens
+# ✅ Correct environment variable name
+CHATGPT_API_KEY = os.getenv("CHATGPT_API_KEY")
 
-openai.api_key = "YOUR_API_KEY"
+# ✅ Check for None before using
+if CHATGPT_API_KEY is None:
+    raise ValueError("CHATGPT_API_KEY not found in environment variables.")
 
-def refine_with_chatgpt(text):
-    messages = [
-        {"role": "system", "content": "You are a satire assistant for Nehru bot."},
-        {"role": "user", "content": text}
-    ]
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        temperature=0.7,
-    )
+# ✅ Initialize OpenAI client
+client = OpenAI(api_key=CHATGPT_API_KEY)
 
-    usage = response["usage"]
-    track_tokens(usage["prompt_tokens"], usage["completion_tokens"])
+def refine_with_chatgpt(topic: str) -> str:
+    try:
+        system_prompt = (
+            "You are Chacha Nehru, a nationalist voice of reason. "
+            "Generate a powerful, emotionally resonant, satirical Hindi tweet about this topic:\n\n"
+            f"\"{topic}\""
+        )
 
-    return response["choices"][0]["message"]["content"]
+        response: ChatCompletion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": topic}
+            ],
+            max_tokens=200,
+            temperature=0.8
+        )
+
+        # ✅ Defensive access
+        if response.choices and response.choices[0].message.content:
+            return response.choices[0].message.content.strip()
+        else:
+            return ""
+
+    except Exception as e:
+        print(f"[ChatGPT Refiner Error] {e}")
+        return ""

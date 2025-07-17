@@ -1,0 +1,34 @@
+{
+  "total_tweets_today": 7,
+  "total_tweets_all_time": 264,
+  "model_usage": {
+    "chatgpt": {
+      "tweets": 200,
+      "tokens_used": 45230,
+      "estimated_cost": ₹¹182.00"
+    },
+    "grok": {
+      "tweets": 64,
+      "tokens_used": 7830,
+      "estimated_cost": ₹¹94.00"
+    }
+  },
+  "language_distribution": {
+    "hindi": 120,
+    "english": 81,
+    "bhojpuri": 63
+  },
+  "tweet_types": {
+    "quote": 77,
+    "satire": 59,
+    "advice": 48,
+    "dialogue": 32,
+    "news": 30,
+    "sports": 18
+  },
+  "average_tokens_per_tweet": {
+    "chatgpt": 115,
+    "grok": 122
+  },
+  "last_updated": "2025-07-17T14:25:00+05:30"
+}
