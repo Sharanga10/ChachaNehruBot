@@ -1,0 +1,27 @@
+2025-07-18 03:17:58,455 — INFO — ⏰ Current Time: 2025-07-18 03:17:58 IST
+2025-07-18 03:17:58,455 — INFO — 🌙 Running in mode: NIGHT
+2025-07-18 03:17:58,456 — INFO — ✅ Tweet posted: {'status': 'error', 'error': 'Consumer key must be string or bytes, not NoneType'}
+2025-07-18 03:17:58,456 — ERROR — ❌ Unhandled exception in run_bot: save_metadata() takes 1 positional argument but 2 were given
+Traceback (most recent call last):
+  File "/Users/abhijita/Desktop/ChachaBotFiles/main.py", line 71, in run_bot
+    save_metadata(metadata, mode)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+TypeError: save_metadata() takes 1 positional argument but 2 were given
+2025-07-18 03:22:49,894 — INFO — ⏰ Current Time: 2025-07-18 03:22:49 IST
+2025-07-18 03:22:49,894 — INFO — 🌙 Running in mode: NIGHT
+2025-07-18 03:22:49,894 — WARNING — ⚠️ Duplicate tweet detected. Skipping.
+2025-07-18 03:23:40,986 — INFO — ⏰ Current Time: 2025-07-18 03:23:40 IST
+2025-07-18 03:23:40,987 — INFO — 🌙 Running in mode: NIGHT
+2025-07-18 03:23:40,987 — WARNING — ⚠️ Duplicate tweet detected. Skipping.
+2025-07-18 03:27:11,162 — INFO — ⏰ Current Time: 2025-07-18 03:27:11 IST
+2025-07-18 03:27:11,163 — INFO — 🌙 Running in mode: NIGHT
+2025-07-18 03:27:11,163 — WARNING — ⚠️ Duplicate tweet detected. Skipping.
+2025-07-18 03:30:04,089 — INFO — ⏰ Current Time: 2025-07-18 03:30:04 IST
+2025-07-18 03:30:04,089 — INFO — 🌙 Running in mode: DAY
+2025-07-18 03:30:04,090 — INFO — ✅ Tweet posted: {'status': 'error', 'error': 'Consumer key must be string or bytes, not NoneType'}
+2025-07-18 03:30:04,090 — ERROR — ❌ Unhandled exception in run_bot: save_metadata() takes 1 positional argument but 2 were given
+Traceback (most recent call last):
+  File "/Users/abhijita/Desktop/ChachaBotFiles/main.py", line 71, in run_bot
+    save_metadata(metadata, mode)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+TypeError: save_metadata() takes 1 positional argument but 2 were given

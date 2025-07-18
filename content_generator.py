@@ -1,41 +1,49 @@
-import os
-from chatgpt_connector import refine_with_chatgpt
-from grok_connector import generate_with_grok
-from sarvam_connector import generate_with_sarvam
+import random
+from models.grok import generate_tweet_grok
+from models.chatgpt import generate_tweet_chatgpt
+from models.sarvam import generate_tweet_sarvam
+from banned_words import is_banned
+from utils import log_event
+from datetime import datetime
 
-def generate_content(topic: str) -> str:
-    """Generate tweet content using Grok, fallback to ChatGPT, then Sarvam."""
-    
-    # Attempt with Grok
-    try:
-        print("[ContentGen] Trying Grok...")
-        result = generate_with_grok(topic)
-        if result:
-            print("[ContentGen] Grok succeeded.")
-            return result
-    except Exception as e:
-        print(f"[ContentGen] Grok failed: {e}")
+# Ordered list of models for fallback
+FALLBACK_MODELS = ["grok", "chatgpt", "sarvam"]
 
-    # Fallback to ChatGPT
-    try:
-        print("[ContentGen] Trying ChatGPT...")
-        result = refine_with_chatgpt(topic)
-        if result:
-            print("[ContentGen] ChatGPT succeeded.")
-            return result
-    except Exception as e:
-        print(f"[ContentGen] ChatGPT failed: {e}")
+def generate_tweet_with_fallback(topic: str, tone: str = "emotional", language: str = "hi", mode: str = "DAY") -> tuple:
+    """
+    Generate tweet using fallback logic: Grok → ChatGPT → Sarvam.
+    Reject banned content. Return tweet and metadata.
+    """
+    for model in FALLBACK_MODELS:
+        try:
+            if model == "grok":
+                tweet = generate_tweet_grok(topic, tone=tone, language=language, mode=mode)
+            elif model == "chatgpt":
+                tweet = generate_tweet_chatgpt(topic, tone=tone, language=language, mode=mode)
+            elif model == "sarvam":
+                tweet = generate_tweet_sarvam(topic, tone=tone, language=language, mode=mode)
+            else:
+                continue
 
-    # Fallback to Sarvam
-    try:
-        print("[ContentGen] Trying Sarvam...")
-        result = generate_with_sarvam(topic)
-        if result:
-            print("[ContentGen] Sarvam succeeded.")
-            return result
-    except Exception as e:
-        print(f"[ContentGen] Sarvam failed: {e}")
+            if tweet and not is_banned(tweet):
+                log_event("content_generator", f"{model} used successfully")
+                metadata = {
+                    "model": model,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "mode": mode,
+                }
+                return tweet, metadata
+            else:
+                log_event("content_generator", f"{model} output rejected (banned or empty)")
 
-    # All models failed
-    print("[ContentGen] All model fallbacks failed.")
-    return "🙏 क्षमा करें, तकनीकी त्रुटि के कारण इस विषय पर ट्वीट तैयार नहीं हो सका।"
+        except Exception as e:
+            log_event("content_generator", f"{model} failed: {str(e)}")
+
+    log_event("content_generator", "All models failed. Returning fallback message.")
+    fallback_tweet = "आज कुछ तकनीकी दिक्कत है, पर चाचा नेहरू कल फिर लौटेंगे। 🚫🤖"
+    metadata = {
+        "model": "none",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "mode": mode,
+    }
+    return fallback_tweet, metadata
