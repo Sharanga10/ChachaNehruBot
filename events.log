@@ -1,0 +1,12 @@
+{"timestamp": "2025-07-18T18:31:06.962397", "source": "content_generator", "message": "grok failed: generate_tweet_grok() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T18:31:06.962556", "source": "content_generator", "message": "chatgpt failed: generate_tweet_chatgpt() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T18:31:06.962588", "source": "content_generator", "message": "sarvam failed: generate_tweet_sarvam() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T18:31:06.962612", "source": "content_generator", "message": "All models failed. Returning fallback message."}
+{"timestamp": "2025-07-18T18:40:23.383725", "source": "content_generator", "message": "grok failed: generate_tweet_grok() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T18:40:23.384372", "source": "content_generator", "message": "chatgpt failed: generate_tweet_chatgpt() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T18:40:23.384406", "source": "content_generator", "message": "sarvam failed: generate_tweet_sarvam() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T18:40:23.384430", "source": "content_generator", "message": "All models failed. Returning fallback message."}
+{"timestamp": "2025-07-18T19:14:47.426416", "source": "content_generator", "message": "grok failed: generate_tweet_grok() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T19:14:47.426816", "source": "content_generator", "message": "chatgpt failed: generate_tweet_chatgpt() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T19:14:47.426850", "source": "content_generator", "message": "sarvam failed: generate_tweet_sarvam() got an unexpected keyword argument 'tone'"}
+{"timestamp": "2025-07-18T19:14:47.426877", "source": "content_generator", "message": "All models failed. Returning fallback message."}
