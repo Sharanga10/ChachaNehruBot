@@ -15,7 +15,7 @@ import logging
 class SecurityConfig:
     """Security configuration settings"""
     rate_limit_requests_per_minute: int = 10
-    max_daily_posts: int = 24
+    max_daily_posts: int = 50  # Updated to match original target
     content_retention_days: int = 30
     encryption_key_rotation_days: int = 7
     audit_log_retention_days: int = 90
@@ -72,6 +72,31 @@ class EthicsConfig:
     fact_verification_required: bool = True
     human_review_threshold: float = 0.7
 
+@dataclass
+class SchedulerConfig:
+    """Scheduler configuration for automated posting"""
+    daily_tweet_quota: int = 50
+    tweet_gap_minutes: int = 30  # 30 minutes between tweets
+    active_hours_start: str = "06:00"
+    active_hours_end: str = "23:30"
+    timezone: str = "Asia/Kolkata"
+    enforce_exact_quota: bool = True
+    
+    # Distribution blocks for 50 tweets/day
+    schedule_blocks: list = None
+    
+    def __post_init__(self):
+        if self.schedule_blocks is None:
+            # Distribute 50 tweets across active hours (17.5 hours = 6:00-23:30)
+            # Morning: 15 tweets (6:00-11:30)
+            # Afternoon: 15 tweets (11:30-17:30) 
+            # Evening: 20 tweets (17:30-23:30)
+            self.schedule_blocks = [
+                {"start": "06:00", "end": "11:30", "max": 15, "interval_minutes": 22},
+                {"start": "11:30", "end": "17:30", "max": 15, "interval_minutes": 24},
+                {"start": "17:30", "end": "23:30", "max": 20, "interval_minutes": 18}
+            ]
+
 class EnhancedConfigManager:
     """Advanced configuration management with environment awareness"""
     
@@ -85,6 +110,7 @@ class EnhancedConfigManager:
         self.fact_check = FactCheckConfig()
         self.ai_models = AIModelConfig()
         self.ethics = EthicsConfig()
+        self.scheduler = SchedulerConfig()
         
         self._load_configurations()
         self._setup_logging()
@@ -103,6 +129,10 @@ class EnhancedConfigManager:
     
     def _load_configurations(self):
         """Load configurations from files with environment overrides"""
+        # Load from existing JSON files
+        self._load_scheduler_config()
+        self._load_tweet_schedule()
+        
         config_files = {
             'security': f'security_{self.env}.yaml',
             'fact_check': f'fact_check_{self.env}.yaml',
@@ -119,6 +149,42 @@ class EnhancedConfigManager:
                     self._update_config(config_type, config_data)
                 except Exception as e:
                     self.logger.warning(f"Failed to load {filename}: {e}")
+    
+    def _load_scheduler_config(self):
+        """Load scheduler configuration from existing JSON file"""
+        try:
+            with open("scheduler_config.json", "r") as f:
+                config_data = json.load(f)
+            
+            self.scheduler.daily_tweet_quota = config_data.get("daily_tweet_quota", 50)
+            self.scheduler.tweet_gap_minutes = config_data.get("tweet_gap_minutes", 30)
+            
+            active_hours = config_data.get("active_hours", {})
+            self.scheduler.active_hours_start = active_hours.get("start", "06:00")
+            self.scheduler.active_hours_end = active_hours.get("end", "23:30")
+            self.scheduler.timezone = config_data.get("timezone", "Asia/Kolkata")
+            self.scheduler.enforce_exact_quota = config_data.get("enforce_exact_quota", True)
+            
+        except Exception as e:
+            self.logger.warning(f"Could not load scheduler_config.json: {e}")
+    
+    def _load_tweet_schedule(self):
+        """Load tweet schedule from existing JSON file"""
+        try:
+            with open("tweet_schedule.json", "r") as f:
+                config_data = json.load(f)
+            
+            # Override daily limit from tweet_schedule.json
+            if config_data.get("daily_limit"):
+                self.scheduler.daily_tweet_quota = config_data["daily_limit"]
+                self.security.max_daily_posts = config_data["daily_limit"]
+            
+            # Load schedule blocks
+            if config_data.get("schedule_blocks"):
+                self.scheduler.schedule_blocks = config_data["schedule_blocks"]
+            
+        except Exception as e:
+            self.logger.warning(f"Could not load tweet_schedule.json: {e}")
     
     def _update_config(self, config_type: str, data: Dict[str, Any]):
         """Update configuration with loaded data"""
@@ -161,7 +227,9 @@ class EnhancedConfigManager:
             self.security.rate_limit_requests_per_minute > 0,
             self.fact_check.confidence_threshold >= 0.5,
             len(self.ai_models.fallback_models) >= 2,
-            self.ethics.bias_detection_enabled is True
+            self.ethics.bias_detection_enabled is True,
+            self.scheduler.daily_tweet_quota > 0,
+            self.scheduler.daily_tweet_quota <= 100  # Reasonable upper limit
         ]
         
         return all(validations)
@@ -183,6 +251,16 @@ class EnhancedConfigManager:
         )
         
         return cost_sorted[0]
+    
+    def get_posting_schedule(self) -> Dict[str, Any]:
+        """Get the complete posting schedule for 50 tweets/day"""
+        return {
+            "daily_quota": self.scheduler.daily_tweet_quota,
+            "active_hours": f"{self.scheduler.active_hours_start}-{self.scheduler.active_hours_end}",
+            "schedule_blocks": self.scheduler.schedule_blocks,
+            "timezone": self.scheduler.timezone,
+            "average_interval_minutes": (17.5 * 60) / self.scheduler.daily_tweet_quota  # ~21 minutes
+        }
 
 # Global configuration instance
 config_manager = EnhancedConfigManager()

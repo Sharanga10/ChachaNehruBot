@@ -1,6 +1,7 @@
 """
 Enhanced Main Application - World's Most Ethical AI Bot
 Zero-downtime, fact-checked, secure automated social media bot
+Configured for 50 tweets per day with intelligent distribution
 """
 
 import asyncio
@@ -11,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import signal
 import json
+import random
 
 # Enhanced imports
 from config.main_config import config_manager
@@ -22,11 +24,12 @@ from post_to_twitter import post_to_twitter
 # Monitoring and scheduling
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 import structlog
 
 class EnhancedBotOrchestrator:
     """
-    World-class bot orchestrator with:
+    World-class bot orchestrator configured for 50 tweets/day with:
     1. Ethical content generation
     2. Multi-layered fact-checking
     3. Enterprise security
@@ -53,7 +56,10 @@ class EnhancedBotOrchestrator:
             'fact_check_passes': 0,
             'fact_check_failures': 0,
             'security_blocks': 0,
-            'start_time': datetime.now()
+            'start_time': datetime.now(),
+            'daily_quota': self.config.scheduler.daily_tweet_quota,
+            'posts_today': 0,
+            'last_reset_date': datetime.now().date()
         }
         
         # Circuit breaker for emergency shutdown
@@ -64,6 +70,7 @@ class EnhancedBotOrchestrator:
             'status': 'starting',
             'last_successful_post': None,
             'last_health_check': datetime.now(),
+            'daily_progress': '0/50',
             'components': {
                 'content_generator': 'unknown',
                 'fact_checker': 'unknown',
@@ -71,6 +78,16 @@ class EnhancedBotOrchestrator:
                 'twitter_api': 'unknown'
             }
         }
+        
+        # Content type rotation for variety
+        self.content_types = [
+            ContentType.SATIRICAL,
+            ContentType.INFORMATIVE,
+            ContentType.REFLECTIVE,
+            ContentType.CULTURAL,
+            ContentType.HISTORICAL
+        ]
+        self.current_content_index = 0
     
     def setup_logging(self):
         """Setup structured logging with multiple outputs"""
@@ -109,7 +126,7 @@ class EnhancedBotOrchestrator:
     
     async def initialize(self):
         """Initialize all bot components"""
-        self.logger.info("🚀 Initializing Enhanced Ethical Bot System")
+        self.logger.info("🚀 Initializing Enhanced Ethical Bot System (50 tweets/day)")
         
         try:
             # Validate configuration
@@ -122,8 +139,8 @@ class EnhancedBotOrchestrator:
             # Setup signal handlers for graceful shutdown
             self._setup_signal_handlers()
             
-            # Setup scheduled tasks
-            self._setup_scheduler()
+            # Setup 50 tweets/day scheduler
+            self._setup_high_volume_scheduler()
             
             # Start health monitoring
             asyncio.create_task(self._health_monitor())
@@ -131,8 +148,17 @@ class EnhancedBotOrchestrator:
             # Start metrics collection
             asyncio.create_task(self._metrics_collector())
             
+            # Start daily reset task
+            asyncio.create_task(self._daily_reset_task())
+            
             self.health_status['status'] = 'running'
-            self.logger.info("✅ Bot system initialized successfully")
+            
+            # Log the posting schedule
+            schedule_info = self.config.get_posting_schedule()
+            self.logger.info("✅ Bot system initialized successfully", 
+                           daily_quota=schedule_info['daily_quota'],
+                           active_hours=schedule_info['active_hours'],
+                           avg_interval=f"{schedule_info['average_interval_minutes']:.1f} minutes")
             
         except Exception as e:
             self.logger.error("❌ Failed to initialize bot system", error=str(e))
@@ -185,16 +211,32 @@ class EnhancedBotOrchestrator:
         signal.signal(signal.SIGTERM, signal_handler)
         signal.signal(signal.SIGINT, signal_handler)
     
-    def _setup_scheduler(self):
-        """Setup automated posting schedule"""
-        # Regular posting schedule - customize based on your needs
-        self.scheduler.add_job(
-            self.generate_and_post_content,
-            CronTrigger(hour="8,12,16,20", minute=0),  # 4 times a day
-            id="regular_posting",
-            max_instances=1,
-            coalesce=True
-        )
+    def _setup_high_volume_scheduler(self):
+        """Setup scheduler for 50 tweets per day with intelligent distribution"""
+        
+        schedule_blocks = self.config.scheduler.schedule_blocks
+        
+        self.logger.info("📅 Setting up high-volume scheduler (50 tweets/day)")
+        
+        # Schedule for each time block
+        for i, block in enumerate(schedule_blocks):
+            start_hour, start_minute = map(int, block['start'].split(':'))
+            end_hour, end_minute = map(int, block['end'].split(':'))
+            max_tweets = block['max']
+            interval_minutes = block['interval_minutes']
+            
+            self.logger.info(f"   Block {i+1}: {block['start']}-{block['end']} "
+                           f"({max_tweets} tweets, every {interval_minutes}min)")
+            
+            # Create interval job for this block
+            self.scheduler.add_job(
+                self._scheduled_post_with_time_check,
+                IntervalTrigger(minutes=interval_minutes),
+                args=[block],
+                id=f"posting_block_{i+1}",
+                max_instances=1,
+                coalesce=True
+            )
         
         # Health check every 5 minutes
         self.scheduler.add_job(
@@ -205,25 +247,88 @@ class EnhancedBotOrchestrator:
             max_instances=1
         )
         
-        # Daily metrics report
+        # Daily metrics report at midnight
         self.scheduler.add_job(
             self.generate_daily_report,
-            CronTrigger(hour=0, minute=0),  # Daily at midnight
+            CronTrigger(hour=0, minute=0),
             id="daily_report",
+            max_instances=1
+        )
+        
+        # Hourly progress report
+        self.scheduler.add_job(
+            self._hourly_progress_report,
+            CronTrigger(minute=0),  # Every hour
+            id="hourly_progress",
             max_instances=1
         )
         
         # Start scheduler
         self.scheduler.start()
-        self.logger.info("📅 Scheduler initialized with automated tasks")
+        self.logger.info("📅 High-volume scheduler initialized (50 tweets/day)")
+    
+    async def _scheduled_post_with_time_check(self, block_config: Dict[str, Any]):
+        """Generate and post content with time block validation"""
+        current_time = datetime.now().time()
+        start_time = datetime.strptime(block_config['start'], '%H:%M').time()
+        end_time = datetime.strptime(block_config['end'], '%H:%M').time()
+        
+        # Check if current time is within the block's active hours
+        if not (start_time <= current_time <= end_time):
+            return  # Skip if outside active hours
+        
+        # Check daily quota
+        await self._reset_daily_counter_if_needed()
+        
+        if self.metrics['posts_today'] >= self.config.scheduler.daily_tweet_quota:
+            self.logger.info(f"📊 Daily quota reached: {self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}")
+            return
+        
+        # Generate and post content
+        await self.generate_and_post_content()
+    
+    async def _reset_daily_counter_if_needed(self):
+        """Reset daily counter at midnight"""
+        current_date = datetime.now().date()
+        if current_date > self.metrics['last_reset_date']:
+            self.logger.info(f"🔄 Daily reset: {self.metrics['posts_today']} tweets posted yesterday")
+            self.metrics['posts_today'] = 0
+            self.metrics['last_reset_date'] = current_date
+            self.health_status['daily_progress'] = f"0/{self.config.scheduler.daily_tweet_quota}"
+    
+    async def _daily_reset_task(self):
+        """Background task to handle daily resets"""
+        while not self.emergency_shutdown:
+            try:
+                await self._reset_daily_counter_if_needed()
+                await asyncio.sleep(3600)  # Check every hour
+            except Exception as e:
+                self.logger.error(f"Daily reset task error: {e}")
+                await asyncio.sleep(3600)
+    
+    async def _hourly_progress_report(self):
+        """Generate hourly progress report"""
+        progress = f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}"
+        percentage = (self.metrics['posts_today'] / self.config.scheduler.daily_tweet_quota) * 100
+        
+        self.logger.info("📊 Hourly Progress Report",
+                        posts_today=self.metrics['posts_today'],
+                        daily_quota=self.config.scheduler.daily_tweet_quota,
+                        progress_percentage=f"{percentage:.1f}%",
+                        successful_posts=self.metrics['successful_posts'],
+                        failed_posts=self.metrics['failed_posts'])
+        
+        self.health_status['daily_progress'] = progress
     
     async def generate_and_post_content(self, manual_topic: str = None, 
-                                      content_type: ContentType = ContentType.SATIRICAL):
+                                      content_type: ContentType = None):
         """
-        Main content generation and posting pipeline with full validation
+        Main content generation and posting pipeline optimized for high volume
         """
         post_id = f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        self.logger.info("🎯 Starting content generation pipeline", post_id=post_id)
+        self.logger.info("🎯 Starting content generation pipeline", 
+                        post_id=post_id,
+                        daily_progress=f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}")
         
         try:
             # Check if we're in emergency shutdown
@@ -231,31 +336,33 @@ class EnhancedBotOrchestrator:
                 self.logger.warning("Emergency shutdown active, skipping post generation")
                 return False
             
-            # Rate limiting check
+            # Rate limiting check (using daily quota)
             if not security_manager.check_rate_limit("daily_posts", self.config.security.max_daily_posts, 86400):
                 self.logger.warning("Daily post limit exceeded")
                 self.metrics['failed_posts'] += 1
                 return False
             
-            # Determine current mode
+            # Determine current mode and content type
             current_hour = datetime.now().hour
             mode = "NIGHT" if current_hour < 6 or current_hour > 22 else "DAY"
             
-            # Select content type based on time if not specified
-            if not manual_topic:
-                if current_hour in [8, 12]:  # Morning and noon - informative
-                    content_type = ContentType.INFORMATIVE
-                elif current_hour in [16]:  # Evening - cultural/reflective
-                    content_type = ContentType.CULTURAL
-                else:  # Night - satirical/reflective
-                    content_type = ContentType.SATIRICAL
+            # Select content type with rotation for variety
+            if content_type is None:
+                content_type = self._get_next_content_type(current_hour)
+            
+            # Select language (80% Hindi, 20% English for variety)
+            language = "hi" if random.random() < 0.8 else "en"
             
             # Generate ethical content
-            self.logger.info("🤖 Generating ethical content", content_type=content_type.value, mode=mode)
+            self.logger.info("🤖 Generating ethical content", 
+                           content_type=content_type.value, 
+                           mode=mode, 
+                           language=language)
+            
             content, metadata = await enhanced_content_generator.generate_ethical_content(
                 topic=manual_topic,
                 content_type=content_type,
-                language="hi",  # Primary language
+                language=language,
                 mode=mode
             )
             
@@ -281,7 +388,11 @@ class EnhancedBotOrchestrator:
                 # Success metrics and logging
                 self.metrics['successful_posts'] += 1
                 self.metrics['total_posts'] += 1
+                self.metrics['posts_today'] += 1
                 self.health_status['last_successful_post'] = datetime.now()
+                
+                # Update progress
+                self.health_status['daily_progress'] = f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}"
                 
                 # Log successful post for audit
                 await self._log_successful_post(content, metadata, post_id)
@@ -289,7 +400,8 @@ class EnhancedBotOrchestrator:
                 self.logger.info("✅ Content posted successfully", 
                                post_id=post_id,
                                model_used=metadata.model_used,
-                               quality_score=metadata.quality_score)
+                               quality_score=metadata.quality_score,
+                               daily_progress=self.health_status['daily_progress'])
                 return True
             else:
                 self.metrics['failed_posts'] += 1
@@ -301,6 +413,29 @@ class EnhancedBotOrchestrator:
             self.logger.error("❌ Content generation pipeline failed", 
                             post_id=post_id, error=str(e), exc_info=True)
             return False
+    
+    def _get_next_content_type(self, current_hour: int) -> ContentType:
+        """Get next content type with time-based preferences and rotation"""
+        # Time-based preferences
+        if 6 <= current_hour < 10:  # Morning: Educational
+            preferred_types = [ContentType.INFORMATIVE, ContentType.REFLECTIVE]
+        elif 10 <= current_hour < 14:  # Late morning: Cultural
+            preferred_types = [ContentType.CULTURAL, ContentType.HISTORICAL]
+        elif 14 <= current_hour < 18:  # Afternoon: Mixed
+            preferred_types = [ContentType.SATIRICAL, ContentType.INFORMATIVE]
+        elif 18 <= current_hour < 22:  # Evening: Reflective
+            preferred_types = [ContentType.REFLECTIVE, ContentType.CULTURAL]
+        else:  # Night: Light content
+            preferred_types = [ContentType.SATIRICAL, ContentType.REFLECTIVE]
+        
+        # 70% time-based preference, 30% rotation for variety
+        if random.random() < 0.7:
+            content_type = random.choice(preferred_types)
+        else:
+            content_type = self.content_types[self.current_content_index]
+            self.current_content_index = (self.current_content_index + 1) % len(self.content_types)
+        
+        return content_type
     
     async def _final_content_validation(self, content: str, metadata) -> Dict[str, Any]:
         """Final validation before posting"""
@@ -346,7 +481,9 @@ class EnhancedBotOrchestrator:
             'timestamp': datetime.now().isoformat(),
             'content': content,
             'metadata': metadata.to_dict(),
-            'validation_passed': True
+            'validation_passed': True,
+            'daily_count': self.metrics['posts_today'],
+            'total_count': self.metrics['total_posts']
         }
         
         # Write to audit log
@@ -367,7 +504,7 @@ class EnhancedBotOrchestrator:
         # Check last successful post timing
         if self.health_status['last_successful_post']:
             time_since_last_post = datetime.now() - self.health_status['last_successful_post']
-            if time_since_last_post > timedelta(hours=8):  # Alert if no post in 8 hours
+            if time_since_last_post > timedelta(hours=2):  # Alert if no post in 2 hours (for 50/day = ~30min intervals)
                 health_issues.append(f"No successful post in {time_since_last_post}")
         
         # Check error rates
@@ -376,6 +513,11 @@ class EnhancedBotOrchestrator:
             if error_rate > 0.3:  # More than 30% failure rate
                 health_issues.append(f"High error rate: {error_rate:.2%}")
         
+        # Check daily progress
+        expected_posts_by_now = self._calculate_expected_posts()
+        if self.metrics['posts_today'] < expected_posts_by_now * 0.8:  # Less than 80% of expected
+            health_issues.append(f"Behind schedule: {self.metrics['posts_today']}/{expected_posts_by_now} expected")
+        
         # Update health status
         self.health_status['last_health_check'] = datetime.now()
         self.health_status['status'] = 'healthy' if not health_issues else 'warning'
@@ -383,7 +525,28 @@ class EnhancedBotOrchestrator:
         if health_issues:
             self.logger.warning("⚠️ Health check found issues", issues=health_issues)
         else:
-            self.logger.info("✅ Health check passed")
+            self.logger.info("✅ Health check passed", 
+                           daily_progress=self.health_status['daily_progress'])
+    
+    def _calculate_expected_posts(self) -> int:
+        """Calculate expected posts by current time of day"""
+        now = datetime.now()
+        current_minutes = now.hour * 60 + now.minute
+        
+        # Active hours: 6:00 (360 min) to 23:30 (1410 min) = 1050 minutes
+        active_start = 6 * 60  # 6:00 AM
+        active_end = 23 * 60 + 30  # 11:30 PM
+        
+        if current_minutes < active_start:
+            return 0
+        elif current_minutes > active_end:
+            return self.config.scheduler.daily_tweet_quota
+        else:
+            # Calculate proportional expected posts
+            active_minutes_elapsed = current_minutes - active_start
+            total_active_minutes = active_end - active_start
+            expected = int((active_minutes_elapsed / total_active_minutes) * self.config.scheduler.daily_tweet_quota)
+            return expected
     
     async def _health_monitor(self):
         """Continuous health monitoring"""
@@ -408,6 +571,8 @@ class EnhancedBotOrchestrator:
                 self.logger.info("📊 Hourly metrics report",
                                uptime_hours=uptime.total_seconds() / 3600,
                                total_posts=self.metrics['total_posts'],
+                               posts_today=self.metrics['posts_today'],
+                               daily_quota=self.config.scheduler.daily_tweet_quota,
                                success_rate=self.metrics['successful_posts'] / max(1, self.metrics['total_posts']),
                                fact_check_passes=self.metrics['fact_check_passes'],
                                security_blocks=self.metrics['security_blocks'])
@@ -430,7 +595,9 @@ class EnhancedBotOrchestrator:
             'health_status': self.health_status,
             'performance': performance_data,
             'security': security_data,
-            'uptime': (datetime.now() - self.metrics['start_time']).total_seconds() / 3600
+            'uptime': (datetime.now() - self.metrics['start_time']).total_seconds() / 3600,
+            'quota_achievement': f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}",
+            'quota_percentage': (self.metrics['posts_today'] / self.config.scheduler.daily_tweet_quota) * 100
         }
         
         # Save report
@@ -440,7 +607,9 @@ class EnhancedBotOrchestrator:
         with open(report_file, 'w', encoding='utf-8') as f:
             json.dump(daily_report, f, indent=2, ensure_ascii=False, default=str)
         
-        self.logger.info("📋 Daily report generated", report_file=report_file)
+        self.logger.info("📋 Daily report generated", 
+                        report_file=report_file,
+                        quota_achievement=daily_report['quota_achievement'])
     
     async def manual_post(self, topic: str, content_type: ContentType = ContentType.SATIRICAL) -> bool:
         """Manually trigger a post with specific topic"""
@@ -465,8 +634,9 @@ class EnhancedBotOrchestrator:
         try:
             await self.initialize()
             
-            self.logger.info("🎯 Enhanced Ethical Bot System is now running")
-            self.logger.info("📊 Monitoring dashboard: http://localhost:8080/health")  # If you implement web dashboard
+            self.logger.info("🎯 Enhanced Ethical Bot System is now running (50 tweets/day)")
+            self.logger.info("📊 Daily quota: 50 tweets distributed across 6:00-23:30")
+            self.logger.info("⏱️ Average interval: ~21 minutes between tweets")
             
             # Keep running until shutdown signal
             while not self.emergency_shutdown:
