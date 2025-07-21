@@ -1,5 +1,5 @@
 """
-Zero-Cost Experimental Configuration
+Zero-Cost Experimental Configuration with Bhojpuri Support
 Uses only free services and existing APIs with strict cost controls
 Perfect for personal experimentation and learning
 """
@@ -23,7 +23,7 @@ class ZeroCostConfig:
     chatgpt_free_requests_per_month: int = 100  # Conservative estimate
     grok_monthly_budget_inr: float = 250.0  # Your existing budget
     
-    # Enabled services (FREE ONLY)
+    # Enabled services (FREE ONLY + ESSENTIAL BHOJPURI)
     enabled_services: Dict[str, bool] = None
     
     def __post_init__(self):
@@ -35,6 +35,15 @@ class ZeroCostConfig:
                 "sarvam": False,    # Disable paid model
                 "claude": False,    # Disable paid model
                 "gemini": False,    # Disable paid model
+                
+                # Future AI Models (PROVISIONED)
+                "dalle": False,         # Image generation - provision for future
+                "midjourney": False,    # Image generation - provision for future
+                "stable_diffusion": True,  # Open source image generation - FREE
+                "runway": False,        # Video generation - provision for future
+                "pika_labs": False,     # Video generation - provision for future
+                "luma_ai": False,       # Video generation - provision for future
+                "kling": False,         # Video generation - provision for future
                 
                 # Fact-checking (FREE ONLY)
                 "google_factcheck": True,   # Free tier available
@@ -56,9 +65,9 @@ class ZeroCostConfig:
                 "hate_speech_detection": True,      # Built-in, no cost
                 "bias_detection": False,            # AI-powered, costs money
                 
-                # Language Processing (FREE ONLY)
+                # Language Processing (FREE + ESSENTIAL BHOJPURI)
                 "google_translate": True,   # Free tier: 500,000 chars/month
-                "bhojpuri_model": False,    # Paid service - disable for now
+                "bhojpuri_model": True,     # ESSENTIAL - Keep enabled even in zero-cost
                 "hindi_sentiment": True,    # Built-in, no cost
                 "indic_nlp": True,         # Open source, no cost
                 "azure_cognitive": False,   # Paid service - disable
@@ -79,6 +88,14 @@ class ZeroCostConfig:
                 "performance_metrics": False, # Paid service - disable
                 "twitter_analytics": False,  # Paid service - disable
                 "custom_dashboard": False,   # Paid service - disable
+                
+                # Future Multimedia Features (PROVISIONED)
+                "image_generation": False,      # Ready for DALL-E, Midjourney
+                "video_generation": False,      # Ready for Runway, Pika
+                "audio_generation": False,      # Ready for ElevenLabs, Murf
+                "3d_generation": False,         # Ready for future 3D AI
+                "avatar_generation": False,     # Ready for avatar creation
+                "animation_generation": False,  # Ready for AI animation
             }
 
 @dataclass
@@ -90,6 +107,7 @@ class LocalInfrastructureConfig:
     logs_dir: str = "logs"
     cache_dir: str = "cache"
     backup_dir: str = "backups"
+    media_dir: str = "media"  # For future image/video storage
     
     # Local database (SQLite instead of MongoDB)
     database_file: str = "data/bot_database.sqlite"
@@ -98,28 +116,101 @@ class LocalInfrastructureConfig:
     cache_file: str = "cache/content_cache.json"
     cache_max_size: int = 1000  # Maximum cached items
     
-    # Reduced posting frequency (to save API costs)
-    tweets_per_day: int = 10    # Reduced from 50 to save costs
-    posting_interval_hours: int = 2.4  # Every 2.4 hours
+    # Posting frequency (balanced for cost vs engagement)
+    tweets_per_day: int = 15    # Increased from 10 to accommodate Bhojpuri
+    posting_interval_hours: float = 1.6  # Every 1.6 hours
     
-    # Language distribution (simplified)
+    # Language distribution (WITH BHOJPURI - ESSENTIAL)
     language_distribution: Dict[str, float] = None
     
     def __post_init__(self):
         if self.language_distribution is None:
-            # Simplified to reduce translation costs
+            # Include Bhojpuri as essential
             self.language_distribution = {
-                "hi": 0.70,   # Hindi: 70% (7 tweets/day)
-                "en": 0.30    # English: 30% (3 tweets/day)
-                # Bhojpuri disabled for now to save costs
+                "hi": 0.60,   # Hindi: 60% (9 tweets/day)
+                "bho": 0.30,  # Bhojpuri: 30% (4-5 tweets/day) - ESSENTIAL
+                "en": 0.10    # English: 10% (1-2 tweets/day)
+            }
+
+@dataclass
+class MultimediaConfig:
+    """Configuration for future AI image/video generation"""
+    
+    # Image generation settings
+    image_models: Dict[str, Dict] = None
+    default_image_size: str = "1024x1024"
+    max_images_per_day: int = 5  # Conservative limit
+    
+    # Video generation settings  
+    video_models: Dict[str, Dict] = None
+    default_video_duration: int = 10  # seconds
+    max_videos_per_day: int = 2  # Very conservative
+    
+    # Local storage for media
+    local_media_storage: bool = True
+    media_cache_size_mb: int = 500  # 500MB cache
+    
+    def __post_init__(self):
+        if self.image_models is None:
+            self.image_models = {
+                "stable_diffusion": {
+                    "enabled": True,
+                    "cost_per_image": 0.0,  # Open source, free to run locally
+                    "quality": "high",
+                    "speed": "medium",
+                    "local_install": True
+                },
+                "dalle": {
+                    "enabled": False,  # Provision for future
+                    "cost_per_image": 0.02,  # $0.02 per image
+                    "quality": "very_high", 
+                    "speed": "fast",
+                    "local_install": False
+                },
+                "midjourney": {
+                    "enabled": False,  # Provision for future
+                    "cost_per_image": 0.03,  # ~$0.03 per image
+                    "quality": "artistic",
+                    "speed": "medium",
+                    "local_install": False
+                }
+            }
+        
+        if self.video_models is None:
+            self.video_models = {
+                "runway": {
+                    "enabled": False,  # Provision for future
+                    "cost_per_second": 0.10,  # ~$0.10 per second
+                    "quality": "high",
+                    "max_duration": 30
+                },
+                "pika_labs": {
+                    "enabled": False,  # Provision for future
+                    "cost_per_second": 0.08,
+                    "quality": "medium",
+                    "max_duration": 15
+                },
+                "luma_ai": {
+                    "enabled": False,  # Provision for future
+                    "cost_per_second": 0.12,
+                    "quality": "very_high",
+                    "max_duration": 10
+                },
+                "kling": {
+                    "enabled": False,  # Provision for future
+                    "cost_per_second": 0.05,  # More affordable
+                    "quality": "good",
+                    "max_duration": 20
+                }
             }
 
 class ZeroCostBotManager:
-    """Zero-cost bot configuration manager"""
+    """Zero-cost bot configuration manager with Bhojpuri and multimedia support"""
     
     def __init__(self):
         self.zero_cost = ZeroCostConfig()
         self.local_infra = LocalInfrastructureConfig()
+        self.multimedia = MultimediaConfig()
         self.setup_local_directories()
         self.setup_logging()
     
@@ -129,11 +220,15 @@ class ZeroCostBotManager:
             self.local_infra.data_dir,
             self.local_infra.logs_dir,
             self.local_infra.cache_dir,
-            self.local_infra.backup_dir
+            self.local_infra.backup_dir,
+            self.local_infra.media_dir,
+            f"{self.local_infra.media_dir}/images",
+            f"{self.local_infra.media_dir}/videos",
+            f"{self.local_infra.media_dir}/audio"
         ]
         
         for directory in directories:
-            Path(directory).mkdir(exist_ok=True)
+            Path(directory).mkdir(parents=True, exist_ok=True)
     
     def setup_logging(self):
         """Setup local logging (free)"""
@@ -157,6 +252,10 @@ class ZeroCostBotManager:
             'grok': 'XAI_API_KEY',           # Your existing Grok API
             'google_translate': 'GOOGLE_API_KEY',  # Free tier
             'newsapi': 'NEWS_API_KEY',       # Free tier
+            'dalle': 'OPENAI_API_KEY',       # Same as OpenAI
+            'runway': 'RUNWAY_API_KEY',      # Future provision
+            'pika': 'PIKA_API_KEY',          # Future provision
+            'luma': 'LUMA_API_KEY',          # Future provision
         }
         
         env_var = key_mapping.get(service)
@@ -169,25 +268,37 @@ class ZeroCostBotManager:
         return self.zero_cost.enabled_services.get(service, False)
     
     def get_daily_tweet_quota(self) -> int:
-        """Get reduced daily tweet quota for cost savings"""
+        """Get daily tweet quota (increased for Bhojpuri support)"""
         return self.local_infra.tweets_per_day
     
     def get_language_for_tweet(self, tweet_number: int) -> str:
-        """Get language for tweet (simplified distribution)"""
-        # 70% Hindi, 30% English (no Bhojpuri for now to save costs)
-        if tweet_number % 10 < 7:
-            return "hi"
+        """Get language for tweet (Hindi 60%, Bhojpuri 30%, English 10%)"""
+        # Distribute based on tweet number
+        if tweet_number % 10 < 6:
+            return "hi"      # Hindi (60%)
+        elif tweet_number % 10 < 9:
+            return "bho"     # Bhojpuri (30%)
         else:
-            return "en"
+            return "en"      # English (10%)
+    
+    def get_daily_language_distribution(self) -> Dict[str, int]:
+        """Get daily tweet count by language"""
+        total_daily = self.local_infra.tweets_per_day
+        return {
+            "hi": int(total_daily * self.local_infra.language_distribution["hi"]),    # 9 tweets
+            "bho": int(total_daily * self.local_infra.language_distribution["bho"]),  # 4-5 tweets  
+            "en": int(total_daily * self.local_infra.language_distribution["en"])     # 1-2 tweets
+        }
     
     def get_monthly_cost_estimate(self) -> Dict[str, float]:
-        """Estimate monthly costs (should be near zero)"""
+        """Estimate monthly costs (should be near zero but include Bhojpuri)"""
         costs = {
             "ai_models": 0.0,
             "fact_checking": 0.0,
             "news_apis": 0.0,
             "security_tools": 0.0,
             "language_processing": 0.0,
+            "multimedia_generation": 0.0,
             "infrastructure": 0.0,
             "monitoring": 0.0,
             "total_usd": 0.0
@@ -197,49 +308,100 @@ class ZeroCostBotManager:
         # ChatGPT: Free tier or your existing credits
         # Grok: Your ₹250 budget = ~$3
         costs["ai_models"] = 3.0  # Maximum from your Grok budget
-        costs["total_usd"] = 3.0
+        
+        # Bhojpuri language processing (essential cost)
+        if self.is_service_enabled("bhojpuri_model"):
+            costs["language_processing"] = 5.0  # Minimal cost for Bhojpuri support
+        
+        # Future multimedia (provisioned but not active)
+        costs["multimedia_generation"] = 0.0  # Ready but not enabled
+        
+        costs["total_usd"] = sum(costs.values())
         
         return costs
     
+    def get_multimedia_cost_estimate(self) -> Dict[str, float]:
+        """Estimate future multimedia costs when enabled"""
+        multimedia_costs = {
+            "daily_images": 0.0,
+            "daily_videos": 0.0,
+            "monthly_total": 0.0
+        }
+        
+        # Image generation costs (when enabled)
+        if self.is_service_enabled("image_generation"):
+            daily_image_cost = self.multimedia.max_images_per_day * 0.02  # DALL-E pricing
+            multimedia_costs["daily_images"] = daily_image_cost
+        
+        # Video generation costs (when enabled)  
+        if self.is_service_enabled("video_generation"):
+            daily_video_cost = self.multimedia.max_videos_per_day * 10 * 0.08  # 10 sec videos
+            multimedia_costs["daily_videos"] = daily_video_cost
+        
+        multimedia_costs["monthly_total"] = (
+            multimedia_costs["daily_images"] + multimedia_costs["daily_videos"]
+        ) * 30
+        
+        return multimedia_costs
+    
     def get_cost_report(self) -> str:
-        """Generate zero-cost configuration report"""
+        """Generate zero-cost configuration report with Bhojpuri and multimedia provisions"""
         costs = self.get_monthly_cost_estimate()
+        multimedia_costs = self.get_multimedia_cost_estimate()
         
         report = f"""
-🆓 ZERO-COST EXPERIMENTAL CONFIGURATION
-{'='*50}
+🆓 ZERO-COST EXPERIMENTAL CONFIGURATION (WITH BHOJPURI)
+{'='*60}
 
-💰 MONTHLY COST ESTIMATE: ${costs['total_usd']:.2f}
-   (Using your existing ChatGPT + Grok APIs only)
+💰 CURRENT MONTHLY COST: ${costs['total_usd']:.2f}
+   (Including essential Bhojpuri language support)
 
 🎯 DAILY OPERATIONS:
-   • {self.local_infra.tweets_per_day} tweets per day (reduced from 50)
-   • {self.local_infra.language_distribution['hi']*100:.0f}% Hindi, {self.local_infra.language_distribution['en']*100:.0f}% English
+   • {self.local_infra.tweets_per_day} tweets per day (every {self.local_infra.posting_interval_hours} hours)
+   • {self.local_infra.language_distribution['hi']*100:.0f}% Hindi, {self.local_infra.language_distribution['bho']*100:.0f}% Bhojpuri, {self.local_infra.language_distribution['en']*100:.0f}% English
    • Local storage (no cloud costs)
    • Free-tier services only
 
-✅ ENABLED SERVICES (FREE):
+✅ ENABLED SERVICES (FREE + ESSENTIAL):
    • ChatGPT API (your existing)
    • Grok API (₹250 budget)
+   • 🏘️ Bhojpuri Language Model (ESSENTIAL)
    • Google Translate (free tier)
    • NewsAPI (free tier)
    • Local logging & storage
    • Built-in security scanning
+   • Stable Diffusion (free, local install)
 
 ❌ DISABLED SERVICES (COST SAVINGS):
    • All paid fact-checking APIs
    • Premium news sources
    • Cloud infrastructure
    • Advanced monitoring
-   • Bhojpuri language model (for now)
+
+🚀 PROVISIONED FOR FUTURE (READY TO ENABLE):
+   • 🎨 AI Image Generation (DALL-E, Midjourney)
+   • 🎬 AI Video Generation (Runway, Pika, Luma, Kling)
+   • 🎵 AI Audio Generation (ElevenLabs, Murf)
+   • 🎭 Avatar & Animation Generation
 
 🏠 LOCAL INFRASTRUCTURE:
    • SQLite database (instead of MongoDB)
    • Local file cache (instead of Redis)
    • Local backup storage
+   • Media storage for future images/videos
    • No hosting costs
 
-📈 COST SAVINGS: ~$135/month compared to full deployment
+📊 LANGUAGE DISTRIBUTION (15 tweets/day):
+   • Hindi: 9 tweets/day ({self.local_infra.language_distribution['hi']*100:.0f}%)
+   • Bhojpuri: 4-5 tweets/day ({self.local_infra.language_distribution['bho']*100:.0f}%)
+   • English: 1-2 tweets/day ({self.local_infra.language_distribution['en']*100:.0f}%)
+
+💡 FUTURE MULTIMEDIA COSTS (when enabled):
+   • Images: ${multimedia_costs['daily_images']:.2f}/day
+   • Videos: ${multimedia_costs['daily_videos']:.2f}/day
+   • Monthly: ${multimedia_costs['monthly_total']:.2f}
+
+📈 COST SAVINGS: ~$130/month compared to full deployment
 """
         return report
 

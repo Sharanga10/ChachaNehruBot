@@ -152,13 +152,16 @@ class ZeroCostBot:
             if not topic:
                 topics = {
                     "hi": ["शिक्षा", "प्रेरणा", "जीवन", "सफलता", "खुशी"],
+                    "bho": ["पढ़ाई", "प्रेरणा", "जिनगी", "सफलता", "खुशी", "गांव", "संस्कृति"],
                     "en": ["education", "motivation", "life", "success", "happiness"]
                 }
                 topic = random.choice(topics.get(language, topics["en"]))
             
-            # Create simple prompt
+            # Create language-specific prompts
             if language == "hi":
                 prompt = f"कृपया '{topic}' के बारे में एक प्रेरणादायक ट्वीट लिखें। 280 अक्षरों के भीतर रखें।"
+            elif language == "bho":
+                prompt = f"कृपया '{topic}' के बारे में भोजपुरी में एक सुंदर ट्वीट लिखीं। भोजपुरी की मिठास और स्थानीय भावना के साथ। 280 अक्षरों के भीतर रखीं।"
             else:
                 prompt = f"Please write an inspiring tweet about '{topic}'. Keep within 280 characters."
             
@@ -201,12 +204,16 @@ class ZeroCostBot:
             if not topic:
                 topics = {
                     "hi": ["शिक्षा", "प्रेरणा", "जीवन", "सफलता", "खुशी"],
+                    "bho": ["पढ़ाई", "प्रेरणा", "जिनगी", "सफलता", "खुशी", "गांव", "संस्कृति"],
                     "en": ["education", "motivation", "life", "success", "happiness"]
                 }
                 topic = random.choice(topics.get(language, topics["en"]))
             
+            # Create language-specific prompts
             if language == "hi":
                 prompt = f"कृपया '{topic}' के बारे में एक सकारात्मक ट्वीट लिखें। 280 अक्षरों के भीतर रखें।"
+            elif language == "bho":
+                prompt = f"कृपया '{topic}' के बारे में भोजपुरी में एक प्यारा ट्वीट लिखीं। भोजपुरी भाषा की मिठास के साथ। 280 अक्षरों के भीतर रखीं।"
             else:
                 prompt = f"Please write a positive tweet about '{topic}'. Keep within 280 characters."
             
@@ -280,7 +287,7 @@ class ZeroCostBot:
         self.db_conn.commit()
     
     async def generate_and_post(self):
-        """Main content generation and posting pipeline"""
+        """Main content generation and posting pipeline with Bhojpuri support"""
         try:
             # Reset daily counter if needed
             current_date = datetime.now().date()
@@ -289,15 +296,16 @@ class ZeroCostBot:
                 self.metrics['last_reset_date'] = current_date
                 self.logger.info("🔄 Daily counter reset")
             
-            # Check daily quota (reduced to save costs)
+            # Check daily quota (increased for Bhojpuri)
             if self.metrics['posts_today'] >= self.config.get_daily_tweet_quota():
-                self.logger.info(f"📊 Daily quota reached: {self.metrics['posts_today']}/10")
+                self.logger.info(f"📊 Daily quota reached: {self.metrics['posts_today']}/15")
                 return False
             
-            # Get language for this tweet
+            # Get language for this tweet (includes Bhojpuri)
             language = self.config.get_language_for_tweet(self.metrics['posts_today'])
+            lang_name = {"hi": "Hindi", "bho": "Bhojpuri", "en": "English"}[language]
             
-            self.logger.info(f"🎯 Generating tweet #{self.metrics['posts_today'] + 1}/10 in {language}")
+            self.logger.info(f"🎯 Generating tweet #{self.metrics['posts_today'] + 1}/15 in {lang_name}")
             
             # Generate content with cost controls
             content = await self.generate_content_with_cost_control(language=language)
@@ -325,7 +333,7 @@ class ZeroCostBot:
             if success:
                 self.metrics['successful_posts'] += 1
                 self.metrics['posts_today'] += 1
-                self.logger.info(f"✅ Tweet posted successfully ({self.metrics['posts_today']}/10 today)")
+                self.logger.info(f"✅ {lang_name} tweet posted successfully ({self.metrics['posts_today']}/15 today)")
             else:
                 self.metrics['failed_posts'] += 1
             
@@ -340,45 +348,89 @@ class ZeroCostBot:
             self.logger.error(f"❌ Generate and post failed: {e}")
             self.metrics['failed_posts'] += 1
             return False
+
+    # Future multimedia methods (provisioned but not active)
+    async def generate_image_with_stable_diffusion(self, prompt: str) -> Optional[str]:
+        """Generate image using Stable Diffusion (free, local install) - PROVISIONED"""
+        # This method is ready for implementation when you want to add images
+        self.logger.info("🎨 Image generation with Stable Diffusion - PROVISIONED FOR FUTURE")
+        return None
     
+    async def generate_video_with_ai(self, prompt: str, model: str = "runway") -> Optional[str]:
+        """Generate video using AI models (Runway, Pika, etc.) - PROVISIONED"""
+        # This method is ready for implementation when you want to add videos
+        self.logger.info(f"🎬 Video generation with {model} - PROVISIONED FOR FUTURE")
+        return None
+
     def show_status(self):
-        """Show current bot status"""
+        """Show current bot status with language distribution"""
         grok_usage = get_token_usage()
         
-        print("\n🆓 ZERO-COST BOT STATUS")
-        print("=" * 40)
-        print(f"📊 Posts today: {self.metrics['posts_today']}/10")
+        print("\n🆓 ZERO-COST BOT STATUS (WITH BHOJPURI)")
+        print("=" * 50)
+        print(f"📊 Posts today: {self.metrics['posts_today']}/15")
         print(f"✅ Successful posts: {self.metrics['successful_posts']}")
         print(f"❌ Failed posts: {self.metrics['failed_posts']}")
         print(f"💰 Grok cost estimate: ₹{grok_usage['estimated_inr']:.2f}/₹250")
         print(f"🕒 Running since: {self.metrics['start_time'].strftime('%Y-%m-%d %H:%M')}")
+        
+        # Language distribution
+        distribution = self.config.get_daily_language_distribution()
+        print(f"\n🌐 Language Distribution (15 tweets/day):")
+        print(f"   🇮🇳 Hindi: {distribution['hi']} tweets (60%)")
+        print(f"   🏘️  Bhojpuri: {distribution['bho']} tweets (30%)")
+        print(f"   🇬🇧 English: {distribution['en']} tweets (10%)")
         
         # Show recent posts from database
         cursor = self.db_conn.execute('''
             SELECT content, language, timestamp FROM posts 
             WHERE success = 1 
             ORDER BY timestamp DESC 
-            LIMIT 3
+            LIMIT 5
         ''')
         
         print("\n📝 Recent posts:")
         for row in cursor.fetchall():
             content, lang, timestamp = row
-            print(f"   {timestamp} [{lang}]: {content[:50]}...")
+            lang_name = {"hi": "Hindi", "bho": "Bhojpuri", "en": "English"}[lang]
+            print(f"   {timestamp} [{lang_name}]: {content[:50]}...")
     
     async def run_experimental_mode(self):
-        """Run in experimental mode - generate a few posts for testing"""
+        """Run in experimental mode - generate test posts in all languages"""
         print("\n🧪 EXPERIMENTAL MODE - GENERATING TEST POSTS")
-        print("=" * 50)
+        print("🌐 Testing Hindi, Bhojpuri, and English content")
+        print("=" * 60)
         
-        for i in range(5):  # Generate 5 test posts
-            print(f"\n🎯 Generating test post {i+1}/5...")
-            success = await self.generate_and_post()
+        # Test specific languages
+        test_languages = ["hi", "bho", "en"]
+        
+        for i, lang in enumerate(test_languages * 2):  # 6 total posts
+            lang_name = {"hi": "Hindi", "bho": "Bhojpuri", "en": "English"}[lang]
+            print(f"\n🎯 Generating test post {i+1}/6 in {lang_name}...")
             
-            if success:
-                print("✅ Post generated successfully")
+            # Temporarily override language selection
+            original_posts_today = self.metrics['posts_today']
+            self.metrics['posts_today'] = i  # This will determine language in normal flow
+            
+            # Generate content in specific language
+            content = await self.generate_content_with_cost_control(language=lang)
+            
+            if content:
+                # Simulate posting
+                success = await self.post_to_twitter_simulation(content)
+                
+                if success:
+                    print(f"✅ {lang_name} post generated successfully")
+                    self.save_post_to_database(content, lang, True, "test_mode")
+                    self.metrics['successful_posts'] += 1
+                else:
+                    print(f"❌ {lang_name} post simulation failed")
+                    self.metrics['failed_posts'] += 1
             else:
-                print("❌ Post generation failed")
+                print(f"❌ {lang_name} content generation failed")
+                self.metrics['failed_posts'] += 1
+            
+            self.metrics['total_posts'] += 1
             
             # Small delay between posts
             await asyncio.sleep(2)
@@ -387,18 +439,19 @@ class ZeroCostBot:
         self.show_status()
     
     async def run_scheduled_mode(self):
-        """Run in scheduled mode - post every 2.4 hours"""
-        print("\n⏰ SCHEDULED MODE - 10 POSTS PER DAY")
-        print("=" * 40)
+        """Run in scheduled mode - 15 posts per day with Bhojpuri"""
+        print("\n⏰ SCHEDULED MODE - 15 POSTS PER DAY (WITH BHOJPURI)")
+        print("🌐 Hindi (60%) + Bhojpuri (30%) + English (10%)")
+        print("=" * 60)
         
-        interval_seconds = int(2.4 * 3600)  # 2.4 hours in seconds
+        interval_seconds = int(1.6 * 3600)  # 1.6 hours in seconds
         
         while True:
             try:
                 await self.generate_and_post()
                 self.show_status()
                 
-                print(f"\n😴 Sleeping for {2.4} hours until next post...")
+                print(f"\n😴 Sleeping for {1.6} hours until next post...")
                 await asyncio.sleep(interval_seconds)
                 
             except KeyboardInterrupt:
