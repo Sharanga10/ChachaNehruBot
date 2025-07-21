@@ -32,7 +32,7 @@ class ZeroCostConfig:
                 # AI Models (Use your existing APIs with cost controls)
                 "chatgpt": True,    # Your existing API with cost control
                 "grok": True,       # Your existing API with ₹250 budget
-                "sarvam": False,    # Disable paid model
+                "sarvam": True,     # 3rd fallback - Indian language model
                 "claude": False,    # Disable paid model
                 "gemini": False,    # Disable paid model
                 
@@ -116,20 +116,20 @@ class LocalInfrastructureConfig:
     cache_file: str = "cache/content_cache.json"
     cache_max_size: int = 1000  # Maximum cached items
     
-    # Posting frequency (balanced for cost vs engagement)
-    tweets_per_day: int = 15    # Increased from 10 to accommodate Bhojpuri
-    posting_interval_hours: float = 1.6  # Every 1.6 hours
+    # Posting frequency (50 tweets per day as required)
+    tweets_per_day: int = 50    # MUST be 50 as specified
+    posting_interval_hours: float = 0.48  # Every 28.8 minutes (24 hours / 50 tweets)
     
     # Language distribution (WITH BHOJPURI - ESSENTIAL)
     language_distribution: Dict[str, float] = None
     
     def __post_init__(self):
         if self.language_distribution is None:
-            # Include Bhojpuri as essential
+            # Include Bhojpuri as essential - 50 tweets/day
             self.language_distribution = {
-                "hi": 0.60,   # Hindi: 60% (9 tweets/day)
-                "bho": 0.30,  # Bhojpuri: 30% (4-5 tweets/day) - ESSENTIAL
-                "en": 0.10    # English: 10% (1-2 tweets/day)
+                "hi": 0.70,   # Hindi: 70% (35 tweets/day)
+                "bho": 0.20,  # Bhojpuri: 20% (10 tweets/day) - ESSENTIAL
+                "en": 0.10    # English: 10% (5 tweets/day)
             }
 
 @dataclass
@@ -307,11 +307,11 @@ class ZeroCostBotManager:
         # Only count your existing API usage (with cost controls)
         # ChatGPT: Free tier or your existing credits
         # Grok: Your ₹250 budget = ~$3
+        # Sarvam: 3rd fallback (minimal usage)
         costs["ai_models"] = 3.0  # Maximum from your Grok budget
         
-        # Bhojpuri language processing (essential cost)
-        if self.is_service_enabled("bhojpuri_model"):
-            costs["language_processing"] = 5.0  # Minimal cost for Bhojpuri support
+        # Language processing is FREE - handled by Grok, ChatGPT, and Sarvam
+        costs["language_processing"] = 0.0  # No additional cost for Bhojpuri
         
         # Future multimedia (provisioned but not active)
         costs["multimedia_generation"] = 0.0  # Ready but not enabled
@@ -354,10 +354,10 @@ class ZeroCostBotManager:
 {'='*60}
 
 💰 CURRENT MONTHLY COST: ${costs['total_usd']:.2f}
-   (Including essential Bhojpuri language support)
+   (Using your existing ChatGPT + Grok APIs + Sarvam fallback)
 
 🎯 DAILY OPERATIONS:
-   • {self.local_infra.tweets_per_day} tweets per day (every {self.local_infra.posting_interval_hours} hours)
+   • {self.local_infra.tweets_per_day} tweets per day (every {self.local_infra.posting_interval_hours:.1f} hours)
    • {self.local_infra.language_distribution['hi']*100:.0f}% Hindi, {self.local_infra.language_distribution['bho']*100:.0f}% Bhojpuri, {self.local_infra.language_distribution['en']*100:.0f}% English
    • Local storage (no cloud costs)
    • Free-tier services only
@@ -365,7 +365,8 @@ class ZeroCostBotManager:
 ✅ ENABLED SERVICES (FREE + ESSENTIAL):
    • ChatGPT API (your existing)
    • Grok API (₹250 budget)
-   • 🏘️ Bhojpuri Language Model (ESSENTIAL)
+   • Sarvam API (3rd fallback for Indian languages)
+   • 🏘️ Bhojpuri Language Support (via AI models - FREE)
    • Google Translate (free tier)
    • NewsAPI (free tier)
    • Local logging & storage
@@ -391,17 +392,22 @@ class ZeroCostBotManager:
    • Media storage for future images/videos
    • No hosting costs
 
-📊 LANGUAGE DISTRIBUTION (15 tweets/day):
-   • Hindi: 9 tweets/day ({self.local_infra.language_distribution['hi']*100:.0f}%)
-   • Bhojpuri: 4-5 tweets/day ({self.local_infra.language_distribution['bho']*100:.0f}%)
-   • English: 1-2 tweets/day ({self.local_infra.language_distribution['en']*100:.0f}%)
+📊 LANGUAGE DISTRIBUTION (50 tweets/day):
+   • Hindi: 35 tweets/day ({self.local_infra.language_distribution['hi']*100:.0f}%)
+   • Bhojpuri: 10 tweets/day ({self.local_infra.language_distribution['bho']*100:.0f}%)
+   • English: 5 tweets/day ({self.local_infra.language_distribution['en']*100:.0f}%)
+
+🤖 AI MODEL FALLBACK CHAIN:
+   1. Grok (₹250 budget) - Primary
+   2. ChatGPT (your existing) - Secondary  
+   3. Sarvam (Indian languages) - Tertiary
 
 💡 FUTURE MULTIMEDIA COSTS (when enabled):
    • Images: ${multimedia_costs['daily_images']:.2f}/day
    • Videos: ${multimedia_costs['daily_videos']:.2f}/day
    • Monthly: ${multimedia_costs['monthly_total']:.2f}
 
-📈 COST SAVINGS: ~$130/month compared to full deployment
+📈 COST SAVINGS: ~$135/month compared to full deployment
 """
         return report
 

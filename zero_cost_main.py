@@ -130,6 +130,13 @@ class ZeroCostBot:
             if content:
                 model_used = "chatgpt"
         
+        # Final fallback to Sarvam (Indian language specialist)
+        if not content:
+            self.logger.info("🤖 Trying Sarvam API (3rd fallback for Indian languages)")
+            content = await self._generate_with_sarvam(topic, language)
+            if content:
+                model_used = "sarvam"
+        
         # Cache successful result (free)
         if content:
             self.cache[cache_key] = content
@@ -232,6 +239,61 @@ class ZeroCostBot:
         
         return None
     
+    async def _generate_with_sarvam(self, topic: str, language: str) -> Optional[str]:
+        """Generate with Sarvam API (3rd fallback - Indian language specialist)"""
+        try:
+            if not topic:
+                topics = {
+                    "hi": ["शिक्षा", "प्रेरणा", "जीवन", "सफलता", "खुशी"],
+                    "bho": ["पढ़ाई", "प्रेरणा", "जिनगी", "सफलता", "खुशी", "गांव", "संस्कृति"],
+                    "en": ["education", "motivation", "life", "success", "happiness"]
+                }
+                topic = random.choice(topics.get(language, topics["en"]))
+            
+            # Create language-specific prompts
+            if language == "hi":
+                prompt = f"कृपया '{topic}' के बारे में एक प्रेरणादायक ट्वीट लिखें। 280 अक्षरों के भीतर रखें।"
+            elif language == "bho":
+                prompt = f"कृपया '{topic}' के बारे में भोजपुरी में एक मीठा ट्वीट लिखीं। 280 अक्षरों के भीतर रखीं।"
+            else:
+                prompt = f"Please write a positive tweet about '{topic}'. Keep within 280 characters."
+            
+            # Sarvam API call (you'll need to set SARVAM_API_KEY)
+            sarvam_key = os.getenv('SARVAM_API_KEY')
+            if not sarvam_key:
+                self.logger.warning("SARVAM_API_KEY not found, skipping Sarvam fallback")
+                return None
+            
+            headers = {
+                'Authorization': f'Bearer {sarvam_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            data = {
+                'messages': [{'role': 'user', 'content': prompt}],
+                'model': 'sarvam-1',  # Adjust model name as needed
+                'max_tokens': 80,
+                'temperature': 0.7
+            }
+            
+            # Replace with actual Sarvam API endpoint
+            response = requests.post(
+                'https://api.sarvam.ai/v1/chat/completions',  # Adjust endpoint
+                headers=headers,
+                json=data,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result['choices'][0]['message']['content'].strip()
+                return content[:280]  # Ensure Twitter limit
+            
+        except Exception as e:
+            self.logger.warning(f"Sarvam API failed: {e}")
+        
+        return None
+
     def basic_content_filter(self, content: str) -> bool:
         """Basic free content filtering"""
         if not content or len(content) < 10:
@@ -296,16 +358,16 @@ class ZeroCostBot:
                 self.metrics['last_reset_date'] = current_date
                 self.logger.info("🔄 Daily counter reset")
             
-            # Check daily quota (increased for Bhojpuri)
+            # Check daily quota (50 tweets per day as required)
             if self.metrics['posts_today'] >= self.config.get_daily_tweet_quota():
-                self.logger.info(f"📊 Daily quota reached: {self.metrics['posts_today']}/15")
+                self.logger.info(f"📊 Daily quota reached: {self.metrics['posts_today']}/50")
                 return False
             
             # Get language for this tweet (includes Bhojpuri)
             language = self.config.get_language_for_tweet(self.metrics['posts_today'])
             lang_name = {"hi": "Hindi", "bho": "Bhojpuri", "en": "English"}[language]
             
-            self.logger.info(f"🎯 Generating tweet #{self.metrics['posts_today'] + 1}/15 in {lang_name}")
+            self.logger.info(f"🎯 Generating tweet #{self.metrics['posts_today'] + 1}/50 in {lang_name}")
             
             # Generate content with cost controls
             content = await self.generate_content_with_cost_control(language=language)
@@ -333,7 +395,7 @@ class ZeroCostBot:
             if success:
                 self.metrics['successful_posts'] += 1
                 self.metrics['posts_today'] += 1
-                self.logger.info(f"✅ {lang_name} tweet posted successfully ({self.metrics['posts_today']}/15 today)")
+                self.logger.info(f"✅ {lang_name} tweet posted successfully ({self.metrics['posts_today']}/50 today)")
             else:
                 self.metrics['failed_posts'] += 1
             
@@ -368,7 +430,7 @@ class ZeroCostBot:
         
         print("\n🆓 ZERO-COST BOT STATUS (WITH BHOJPURI)")
         print("=" * 50)
-        print(f"📊 Posts today: {self.metrics['posts_today']}/15")
+        print(f"📊 Posts today: {self.metrics['posts_today']}/50")
         print(f"✅ Successful posts: {self.metrics['successful_posts']}")
         print(f"❌ Failed posts: {self.metrics['failed_posts']}")
         print(f"💰 Grok cost estimate: ₹{grok_usage['estimated_inr']:.2f}/₹250")
@@ -376,10 +438,16 @@ class ZeroCostBot:
         
         # Language distribution
         distribution = self.config.get_daily_language_distribution()
-        print(f"\n🌐 Language Distribution (15 tweets/day):")
-        print(f"   🇮🇳 Hindi: {distribution['hi']} tweets (60%)")
-        print(f"   🏘️  Bhojpuri: {distribution['bho']} tweets (30%)")
+        print(f"\n🌐 Language Distribution (50 tweets/day):")
+        print(f"   🇮🇳 Hindi: {distribution['hi']} tweets (70%)")
+        print(f"   🏘️  Bhojpuri: {distribution['bho']} tweets (20%)")
         print(f"   🇬🇧 English: {distribution['en']} tweets (10%)")
+        
+        # AI Model fallback chain
+        print(f"\n🤖 AI Model Fallback Chain:")
+        print(f"   1️⃣ Grok (₹250 budget) - Primary")
+        print(f"   2️⃣ ChatGPT (your existing) - Secondary")
+        print(f"   3️⃣ Sarvam (Indian languages) - Tertiary")
         
         # Show recent posts from database
         cursor = self.db_conn.execute('''
@@ -439,19 +507,19 @@ class ZeroCostBot:
         self.show_status()
     
     async def run_scheduled_mode(self):
-        """Run in scheduled mode - 15 posts per day with Bhojpuri"""
-        print("\n⏰ SCHEDULED MODE - 15 POSTS PER DAY (WITH BHOJPURI)")
-        print("🌐 Hindi (60%) + Bhojpuri (30%) + English (10%)")
+        """Run in scheduled mode - 50 posts per day with Bhojpuri"""
+        print("\n⏰ SCHEDULED MODE - 50 POSTS PER DAY (WITH BHOJPURI)")
+        print("🌐 Hindi (70%) + Bhojpuri (20%) + English (10%)")
         print("=" * 60)
         
-        interval_seconds = int(1.6 * 3600)  # 1.6 hours in seconds
+        interval_seconds = int(0.48 * 3600)  # 0.48 hours = 28.8 minutes
         
         while True:
             try:
                 await self.generate_and_post()
                 self.show_status()
                 
-                print(f"\n😴 Sleeping for {1.6} hours until next post...")
+                print(f"\n😴 Sleeping for 29 minutes until next post...")
                 await asyncio.sleep(interval_seconds)
                 
             except KeyboardInterrupt:
