@@ -1,0 +1,21 @@
+# Zero-Cost Experimental Bot Requirements
+# Minimal dependencies for personal experimentation
+
+# Core dependencies (essential)
+requests>=2.28.0
+openai>=0.27.0
+
+# Optional dependencies (if you want to use them)
+# tweepy>=4.14.0  # Uncomment if you want real Twitter posting
+# python-dotenv>=0.19.0  # Uncomment for .env file support
+
+# GUI dependencies (for Mac app)
+# tkinter is built-in with Python, no need to install
+
+# Development dependencies (optional)
+# pytest>=7.0.0  # Uncomment for testing
+
+# Note: Most services are either built-in or use free tiers
+# SQLite is built-in with Python
+# JSON handling is built-in
+# Basic HTTP requests covered by 'requests'
