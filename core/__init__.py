@@ -1,0 +1,1 @@
+# Core package for enhanced ethical bot system
