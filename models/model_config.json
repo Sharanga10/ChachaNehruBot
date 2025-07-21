@@ -1,16 +1,21 @@
-import json
-import os
-
-def get_model_config(model_name: str) -> dict:
-    """
-    Load and return config for the given model name from models/model_config.json.
-    Returns empty dict if not found or on error.
-    """
-    config_path = os.path.join(os.path.dirname(__file__), "model_config.json")
-    try:
-        with open(config_path, "r") as f:
-            all_configs = json.load(f)
-        return all_configs.get(model_name, {})
-    except Exception as e:
-        print(f"⚠️ Error loading model config: {e}")
-        return {}
+{
+  "default_model": "grok",
+  "models": {
+    "grok": {
+      "model": "grok-4-0709",
+      "api_url": "https://api.x.ai/v1/chat/completions",
+      "max_tokens": 100,
+      "temperature": 0.7
+    },
+    "chatgpt": {
+      "model": "gpt-4o-mini",
+      "max_tokens": 100,
+      "temperature": 0.7
+    },
+    "sarvam": {
+      "api_url": "https://api.sarvam.ai/chat/completions",
+      "max_tokens": 100,
+      "temperature": 0.7
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "hard_ban": [
+    "hate",
+    "violence",
+    "terrorism",
+    "explicit",
+    "inappropriate"
+  ],
+  "soft_warn": [
+    "controversial",
+    "sensitive",
+    "political"
+  ]
+}
