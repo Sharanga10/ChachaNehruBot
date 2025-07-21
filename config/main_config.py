@@ -97,6 +97,117 @@ class SchedulerConfig:
                 {"start": "17:30", "end": "23:30", "max": 20, "interval_minutes": 18}
             ]
 
+@dataclass
+class LanguageConfig:
+    """Language configuration with Bhojpuri support"""
+    primary_language: str = "hi"  # Hindi
+    supported_languages: list = None
+    language_distribution: Dict[str, float] = None
+    bhojpuri_model_enabled: bool = True
+    translation_api_key: str = ""
+    
+    def __post_init__(self):
+        if self.supported_languages is None:
+            self.supported_languages = ["hi", "bho", "en"]  # Hindi, Bhojpuri, English
+        
+        if self.language_distribution is None:
+            self.language_distribution = {
+                "hi": 0.70,   # Hindi: 70% (35 tweets/day)
+                "bho": 0.20,  # Bhojpuri: 20% (10 tweets/day)
+                "en": 0.10    # English: 10% (5 tweets/day)
+            }
+
+@dataclass
+class CostOptimizationConfig:
+    """Cost optimization and service provisioning configuration"""
+    deployment_phase: str = "phase1"  # phase1, phase2, phase3
+    
+    # Service provisioning flags
+    premium_fact_check_enabled: bool = False
+    advanced_news_apis_enabled: bool = False
+    bias_detection_enabled: bool = False
+    performance_monitoring_enabled: bool = False
+    high_availability_enabled: bool = False
+    advanced_analytics_enabled: bool = False
+    
+    # Cost tracking
+    monthly_budget_limit: float = 150.00  # Phase 1 budget
+    cost_alerts_enabled: bool = True
+    usage_monitoring_enabled: bool = True
+    
+    # API service configurations
+    enabled_services: Dict[str, bool] = None
+    
+    def __post_init__(self):
+        if self.enabled_services is None:
+            # Phase 1 - Essential services only
+            if self.deployment_phase == "phase1":
+                self.enabled_services = {
+                    # AI Models (Essential)
+                    "grok": True,
+                    "chatgpt": True,
+                    "sarvam": True,
+                    "claude": False,  # Provision for future
+                    "gemini": False,  # Provision for future
+                    
+                    # Fact-checking (Basic)
+                    "google_factcheck": True,
+                    "snopes": True,
+                    "politifact": False,  # Provision for future
+                    "factcheck_org": False,  # Provision for future
+                    
+                    # News APIs (Basic)
+                    "newsapi": True,
+                    "times_of_india": True,
+                    "guardian": False,  # Provision for future
+                    "reuters": False,  # Provision for future
+                    "ap_news": False,  # Provision for future
+                    
+                    # Security (Essential)
+                    "content_security_scanner": True,
+                    "malicious_url_checker": True,
+                    "sentiment_analysis": True,
+                    "hate_speech_detection": True,
+                    "bias_detection": False,  # Provision for future
+                    
+                    # Language Processing
+                    "google_translate": True,
+                    "bhojpuri_model": True,
+                    "hindi_sentiment": True,
+                    "indic_nlp": True,
+                    "azure_cognitive": False,  # Provision for future
+                    
+                    # Infrastructure (Basic)
+                    "redis_cache": True,
+                    "mongodb": True,
+                    "backup_storage": True,
+                    "cdn": False,  # Provision for future
+                    "load_balancer": False,  # Provision for future
+                    
+                    # Monitoring (Basic)
+                    "uptime_monitoring": True,
+                    "basic_logging": True,
+                    "performance_metrics": False,  # Provision for future
+                    "twitter_analytics": False,  # Provision for future
+                    "custom_dashboard": False,  # Provision for future
+                }
+            
+            # Phase 2 - Growth features
+            elif self.deployment_phase == "phase2":
+                self.enabled_services.update({
+                    "claude": True,
+                    "politifact": True,
+                    "guardian": True,
+                    "bias_detection": True,
+                    "performance_metrics": True,
+                    "azure_cognitive": True,
+                })
+            
+            # Phase 3 - Full deployment
+            elif self.deployment_phase == "phase3":
+                # Enable all services
+                self.enabled_services = {key: True for key in self.enabled_services.keys()}
+
 class EnhancedConfigManager:
     """Advanced configuration management with environment awareness"""
     
@@ -111,6 +222,8 @@ class EnhancedConfigManager:
         self.ai_models = AIModelConfig()
         self.ethics = EthicsConfig()
         self.scheduler = SchedulerConfig()
+        self.language = LanguageConfig()
+        self.cost_optimization = CostOptimizationConfig()
         
         self._load_configurations()
         self._setup_logging()
@@ -261,6 +374,169 @@ class EnhancedConfigManager:
             "timezone": self.scheduler.timezone,
             "average_interval_minutes": (17.5 * 60) / self.scheduler.daily_tweet_quota  # ~21 minutes
         }
+
+    def get_language_for_tweet(self, tweet_number: int) -> str:
+        """Get language for specific tweet based on distribution"""
+        # Use deterministic distribution based on tweet number
+        distribution = self.language.language_distribution
+        
+        if tweet_number % 10 < 7:  # 70% Hindi
+            return "hi"
+        elif tweet_number % 10 < 9:  # 20% Bhojpuri (positions 7-8)
+            return "bho"
+        else:  # 10% English (positions 9)
+            return "en"
+    
+    def get_daily_language_distribution(self) -> Dict[str, int]:
+        """Get daily tweet count by language"""
+        total_daily = self.scheduler.daily_tweet_quota
+        return {
+            "hi": int(total_daily * self.language.language_distribution["hi"]),    # 35 tweets
+            "bho": int(total_daily * self.language.language_distribution["bho"]),  # 10 tweets  
+            "en": int(total_daily * self.language.language_distribution["en"])     # 5 tweets
+        }
+    
+    def is_service_enabled(self, service_name: str) -> bool:
+        """Check if a service is enabled in current deployment phase"""
+        return self.cost_optimization.enabled_services.get(service_name, False)
+    
+    def get_monthly_cost_estimate(self) -> Dict[str, float]:
+        """Calculate estimated monthly costs based on enabled services"""
+        costs = {
+            "ai_models": 0.0,
+            "fact_checking": 0.0,
+            "news_apis": 0.0,
+            "security_tools": 0.0,
+            "language_processing": 0.0,
+            "infrastructure": 0.0,
+            "monitoring": 0.0,
+            "security_compliance": 0.0
+        }
+        
+        # AI Models
+        if self.is_service_enabled("grok"):
+            costs["ai_models"] += 2.10  # $2.10/month
+        if self.is_service_enabled("chatgpt"):
+            costs["ai_models"] += 0.60  # $0.60/month
+        if self.is_service_enabled("sarvam"):
+            costs["ai_models"] += 0.075  # $0.075/month
+        if self.is_service_enabled("claude"):
+            costs["ai_models"] += 0.90  # $0.90/month (future)
+        if self.is_service_enabled("gemini"):
+            costs["ai_models"] += 0.30  # $0.30/month (future)
+        
+        # Fact-checking
+        if self.is_service_enabled("google_factcheck"):
+            costs["fact_checking"] += 5.00
+        if self.is_service_enabled("snopes"):
+            costs["fact_checking"] += 15.00
+        if self.is_service_enabled("politifact"):
+            costs["fact_checking"] += 12.00
+        if self.is_service_enabled("factcheck_org"):
+            costs["fact_checking"] += 10.00
+        
+        # News APIs
+        if self.is_service_enabled("newsapi"):
+            costs["news_apis"] += 10.00
+        if self.is_service_enabled("times_of_india"):
+            costs["news_apis"] += 6.00
+        if self.is_service_enabled("guardian"):
+            costs["news_apis"] += 8.00
+        if self.is_service_enabled("reuters"):
+            costs["news_apis"] += 15.00
+        if self.is_service_enabled("ap_news"):
+            costs["news_apis"] += 12.00
+        
+        # Security Tools
+        if self.is_service_enabled("content_security_scanner"):
+            costs["security_tools"] += 5.00
+        if self.is_service_enabled("malicious_url_checker"):
+            costs["security_tools"] += 3.00
+        if self.is_service_enabled("sentiment_analysis"):
+            costs["security_tools"] += 4.00
+        if self.is_service_enabled("hate_speech_detection"):
+            costs["security_tools"] += 6.00
+        if self.is_service_enabled("bias_detection"):
+            costs["security_tools"] += 8.00
+        
+        # Language Processing
+        if self.is_service_enabled("google_translate"):
+            costs["language_processing"] += 8.00
+        if self.is_service_enabled("bhojpuri_model"):
+            costs["language_processing"] += 15.00
+        if self.is_service_enabled("hindi_sentiment"):
+            costs["language_processing"] += 6.00
+        if self.is_service_enabled("indic_nlp"):
+            costs["language_processing"] += 4.00
+        if self.is_service_enabled("azure_cognitive"):
+            costs["language_processing"] += 12.00
+        
+        # Infrastructure
+        costs["infrastructure"] += 20.00  # VPS (always needed)
+        if self.is_service_enabled("mongodb"):
+            costs["infrastructure"] += 5.00
+        if self.is_service_enabled("redis_cache"):
+            costs["infrastructure"] += 3.00
+        if self.is_service_enabled("backup_storage"):
+            costs["infrastructure"] += 4.00
+        if self.is_service_enabled("cdn"):
+            costs["infrastructure"] += 2.00
+        if self.is_service_enabled("load_balancer"):
+            costs["infrastructure"] += 15.00
+        
+        # Monitoring
+        if self.is_service_enabled("uptime_monitoring"):
+            costs["monitoring"] += 5.00
+        if self.is_service_enabled("performance_metrics"):
+            costs["monitoring"] += 8.00
+        if self.is_service_enabled("twitter_analytics"):
+            costs["monitoring"] += 10.00
+        if self.is_service_enabled("custom_dashboard"):
+            costs["monitoring"] += 12.00
+        
+        # Security & Compliance
+        costs["security_compliance"] += 2.00  # SSL (always needed)
+        costs["security_compliance"] += 6.00  # Audit logging (always needed)
+        costs["security_compliance"] += 4.00  # Data encryption (always needed)
+        
+        return costs
+    
+    def get_total_monthly_cost(self) -> float:
+        """Get total estimated monthly cost"""
+        costs = self.get_monthly_cost_estimate()
+        return sum(costs.values())
+    
+    def get_cost_breakdown_report(self) -> str:
+        """Generate detailed cost breakdown report"""
+        costs = self.get_monthly_cost_estimate()
+        total = sum(costs.values())
+        
+        report = f"""
+💰 MONTHLY COST BREAKDOWN - {self.cost_optimization.deployment_phase.upper()}
+{'='*60}
+
+📊 By Category:
+"""
+        for category, cost in costs.items():
+            if cost > 0:
+                percentage = (cost / total) * 100
+                report += f"   {category.replace('_', ' ').title()}: ${cost:.2f} ({percentage:.1f}%)\n"
+        
+        report += f"""
+💵 TOTAL MONTHLY COST: ${total:.2f}
+
+🌐 Language Distribution (50 tweets/day):
+   Hindi (70%): 35 tweets/day
+   Bhojpuri (20%): 10 tweets/day  
+   English (10%): 5 tweets/day
+
+📈 Cost per Tweet: ${total/1500:.3f}
+📅 Cost per Day: ${total/30:.2f}
+
+🎯 Budget Status: {'✅ WITHIN BUDGET' if total <= self.cost_optimization.monthly_budget_limit else '⚠️ OVER BUDGET'}
+"""
+        
+        return report
 
 # Global configuration instance
 config_manager = EnhancedConfigManager()

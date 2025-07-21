@@ -307,16 +307,24 @@ class EnhancedBotOrchestrator:
                 await asyncio.sleep(3600)
     
     async def _hourly_progress_report(self):
-        """Generate hourly progress report"""
+        """Generate hourly progress report with language tracking"""
         progress = f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}"
         percentage = (self.metrics['posts_today'] / self.config.scheduler.daily_tweet_quota) * 100
+        
+        # Estimate language distribution so far
+        estimated_hindi = int(self.metrics['posts_today'] * 0.70)
+        estimated_bhojpuri = int(self.metrics['posts_today'] * 0.20)
+        estimated_english = int(self.metrics['posts_today'] * 0.10)
         
         self.logger.info("📊 Hourly Progress Report",
                         posts_today=self.metrics['posts_today'],
                         daily_quota=self.config.scheduler.daily_tweet_quota,
                         progress_percentage=f"{percentage:.1f}%",
                         successful_posts=self.metrics['successful_posts'],
-                        failed_posts=self.metrics['failed_posts'])
+                        failed_posts=self.metrics['failed_posts'],
+                        estimated_hindi=estimated_hindi,
+                        estimated_bhojpuri=estimated_bhojpuri,
+                        estimated_english=estimated_english)
         
         self.health_status['daily_progress'] = progress
     
@@ -324,11 +332,17 @@ class EnhancedBotOrchestrator:
                                       content_type: ContentType = None):
         """
         Main content generation and posting pipeline optimized for high volume
+        Now supports Hindi (70%), Bhojpuri (20%), English (10%) distribution
         """
         post_id = f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Get language for this tweet based on distribution
+        language = self._get_language_for_current_tweet()
+        
         self.logger.info("🎯 Starting content generation pipeline", 
                         post_id=post_id,
-                        daily_progress=f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}")
+                        daily_progress=f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}",
+                        language=language)
         
         try:
             # Check if we're in emergency shutdown
@@ -350,10 +364,7 @@ class EnhancedBotOrchestrator:
             if content_type is None:
                 content_type = self._get_next_content_type(current_hour)
             
-            # Select language (80% Hindi, 20% English for variety)
-            language = "hi" if random.random() < 0.8 else "en"
-            
-            # Generate ethical content
+            # Generate ethical content with selected language
             self.logger.info("🤖 Generating ethical content", 
                            content_type=content_type.value, 
                            mode=mode, 
@@ -368,7 +379,7 @@ class EnhancedBotOrchestrator:
             
             if not content:
                 self.logger.warning("❌ Content generation failed", 
-                                  reason=metadata.security_scan_result.get('threats', ['unknown']))
+                                  reason=metadata.security_scan_result.get('threats', ['unknown']) if metadata else ['generation_failed'])
                 self.metrics['failed_posts'] += 1
                 return False
             
@@ -395,12 +406,13 @@ class EnhancedBotOrchestrator:
                 self.health_status['daily_progress'] = f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}"
                 
                 # Log successful post for audit
-                await self._log_successful_post(content, metadata, post_id)
+                await self._log_successful_post(content, metadata, post_id, language)
                 
                 self.logger.info("✅ Content posted successfully", 
                                post_id=post_id,
                                model_used=metadata.model_used,
                                quality_score=metadata.quality_score,
+                               language=language,
                                daily_progress=self.health_status['daily_progress'])
                 return True
             else:
@@ -436,6 +448,11 @@ class EnhancedBotOrchestrator:
             self.current_content_index = (self.current_content_index + 1) % len(self.content_types)
         
         return content_type
+    
+    def _get_language_for_current_tweet(self) -> str:
+        """Get language for current tweet based on distribution (Hindi 70%, Bhojpuri 20%, English 10%)"""
+        # Use the configuration manager's method for consistent distribution
+        return self.config.get_language_for_tweet(self.metrics['posts_today'])
     
     async def _final_content_validation(self, content: str, metadata) -> Dict[str, Any]:
         """Final validation before posting"""
@@ -474,13 +491,14 @@ class EnhancedBotOrchestrator:
         
         return validation_result
     
-    async def _log_successful_post(self, content: str, metadata, post_id: str):
+    async def _log_successful_post(self, content: str, metadata, post_id: str, language: str):
         """Log successful post for audit and analysis"""
         audit_entry = {
             'post_id': post_id,
             'timestamp': datetime.now().isoformat(),
             'content': content,
-            'metadata': metadata.to_dict(),
+            'language': language,
+            'metadata': metadata.to_dict() if hasattr(metadata, 'to_dict') else str(metadata),
             'validation_passed': True,
             'daily_count': self.metrics['posts_today'],
             'total_count': self.metrics['total_posts']
@@ -582,12 +600,16 @@ class EnhancedBotOrchestrator:
                 await asyncio.sleep(1800)  # Wait 30 minutes on error
     
     async def generate_daily_report(self):
-        """Generate comprehensive daily report"""
+        """Generate comprehensive daily report with language distribution"""
         self.logger.info("📋 Generating daily report")
+        
+        # Get language distribution for the day
+        language_distribution = self.config.get_daily_language_distribution()
         
         # Collect performance data
         performance_data = enhanced_content_generator.get_performance_report()
         security_data = security_manager.get_security_status()
+        cost_breakdown = self.config.get_cost_breakdown_report()
         
         daily_report = {
             'date': datetime.now().strftime('%Y-%m-%d'),
@@ -597,7 +619,17 @@ class EnhancedBotOrchestrator:
             'security': security_data,
             'uptime': (datetime.now() - self.metrics['start_time']).total_seconds() / 3600,
             'quota_achievement': f"{self.metrics['posts_today']}/{self.config.scheduler.daily_tweet_quota}",
-            'quota_percentage': (self.metrics['posts_today'] / self.config.scheduler.daily_tweet_quota) * 100
+            'quota_percentage': (self.metrics['posts_today'] / self.config.scheduler.daily_tweet_quota) * 100,
+            'language_distribution': {
+                'target': language_distribution,
+                'actual': {
+                    'hi': f"~{language_distribution['hi']} tweets",
+                    'bho': f"~{language_distribution['bho']} tweets", 
+                    'en': f"~{language_distribution['en']} tweets"
+                }
+            },
+            'cost_analysis': cost_breakdown,
+            'deployment_phase': self.config.cost_optimization.deployment_phase
         }
         
         # Save report
@@ -609,7 +641,8 @@ class EnhancedBotOrchestrator:
         
         self.logger.info("📋 Daily report generated", 
                         report_file=report_file,
-                        quota_achievement=daily_report['quota_achievement'])
+                        quota_achievement=daily_report['quota_achievement'],
+                        languages="Hindi(70%), Bhojpuri(20%), English(10%)")
     
     async def manual_post(self, topic: str, content_type: ContentType = ContentType.SATIRICAL) -> bool:
         """Manually trigger a post with specific topic"""

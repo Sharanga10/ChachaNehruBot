@@ -15,6 +15,7 @@ import re
 import openai
 import anthropic
 import google.generativeai as genai
+import random # Added for _select_contextual_topic
 
 from config.main_config import config_manager
 from core.fact_checker import fact_checker, FactCheckStatus
@@ -133,90 +134,91 @@ class EnhancedContentGenerator:
             }
         }
     
-    async def generate_ethical_content(self, topic: str = None, content_type: ContentType = ContentType.SATIRICAL,
-                                     language: str = "hi", mode: str = "DAY") -> Tuple[Optional[str], ContentMetadata]:
+    async def generate_ethical_content(self, topic: str = None, 
+                                     content_type: ContentType = ContentType.SATIRICAL,
+                                     language: str = "hi", mode: str = "DAY") -> Tuple[str, ContentMetadata]:
         """
-        Generate ethical, fact-checked content with full validation pipeline
+        Generate ethical, fact-checked content with multi-language support
+        Languages: Hindi (hi), Bhojpuri (bho), English (en)
         """
-        start_time = datetime.now()
-        content_id = self._generate_content_id(topic, content_type, language)
         
-        self.logger.info(f"Starting ethical content generation: {content_id}")
+        # Validate language support
+        supported_languages = ["hi", "bho", "en"]
+        if language not in supported_languages:
+            self.logger.warning(f"Unsupported language {language}, defaulting to Hindi")
+            language = "hi"
         
-        try:
-            # Step 1: Check cache
-            cached_content = self._get_cached_content(content_id)
-            if cached_content:
-                return cached_content
+        # Auto-select topic if not provided
+        if not topic:
+            topic = self._select_contextual_topic(content_type, language, mode)
+        
+        self.logger.info(f"Generating content: {content_type.value} in {language} about {topic}")
+        
+        # Generate content with optimal model
+        content, model_used = await self._generate_with_optimal_model(
+            topic, content_type, language, mode
+        )
+        
+        if not content:
+            self.logger.error("All content generation models failed")
+            return None, None
+        
+        # Create metadata
+        metadata = ContentMetadata(
+            topic=topic,
+            content_type=content_type,
+            language=language,
+            model_used=model_used,
+            generation_time=datetime.now(),
+            mode=mode
+        )
+        
+        # Comprehensive validation pipeline
+        validation_passed = True
+        
+        # 1. Fact-check the content
+        if config_manager.fact_check.enabled:
+            self.logger.info("🔍 Performing fact-check")
+            fact_check_result = await fact_checker.comprehensive_fact_check(content)
+            metadata.fact_check_result = fact_check_result
             
-            # Step 2: Generate content with optimal model selection
-            content, model_used, generation_time = await self._generate_with_optimal_model(
-                topic, content_type, language, mode
-            )
-            
-            if not content:
-                return None, self._create_failed_metadata(content_id, "generation_failed")
-            
-            # Step 3: Security scan
-            security_scan = security_manager.scan_content_security(content)
-            if not security_scan[0]:  # Not safe
-                self.logger.warning(f"Content failed security scan: {security_scan[1]}")
-                return None, self._create_failed_metadata(content_id, "security_failed")
-            
-            # Step 4: Banned words check
-            if is_banned(content):
-                self.logger.warning("Content contains banned words")
-                return None, self._create_failed_metadata(content_id, "banned_words")
-            
-            # Step 5: Fact-checking (if enabled)
-            fact_check_result = None
-            if self.config.fact_check.enabled:
-                context = {
-                    "historical_period": "modern_india",
-                    "persona": "nehru",
-                    "content_type": content_type.value
-                }
-                fact_check_result = await fact_checker.comprehensive_fact_check(content, context)
-                
-                # Reject content with low fact-check confidence
-                if fact_check_result.confidence < self.config.fact_check.confidence_threshold:
-                    self.logger.warning(f"Content failed fact-check: {fact_check_result.status}")
-                    return None, self._create_failed_metadata(content_id, "fact_check_failed")
-            
-            # Step 6: Quality assessment
-            quality_score = await self._assess_content_quality(content, content_type, language)
-            
-            # Step 7: Create metadata
-            metadata = ContentMetadata(
-                model_used=model_used,
-                quality_score=quality_score,
-                fact_check_result=fact_check_result.to_dict() if fact_check_result else None,
-                security_scan_result={"is_safe": security_scan[0], "threats": security_scan[1]},
-                generation_time=generation_time,
-                content_type=content_type,
-                language=language,
-                character_count=len(content),
-                timestamp=datetime.now(),
-                content_id=content_id
-            )
-            
-            # Step 8: Cache successful result
-            self._cache_content(content_id, (content, metadata))
-            
-            # Step 9: Update model performance metrics
-            self._update_model_performance(model_used, True, quality_score, generation_time)
-            
-            total_time = (datetime.now() - start_time).total_seconds()
-            self.logger.info(f"Content generated successfully: {content_id} in {total_time:.2f}s")
-            
-            return content, metadata
-            
-        except Exception as e:
-            self.logger.error(f"Content generation failed: {e}", exc_info=True)
-            return None, self._create_failed_metadata(content_id, f"exception: {str(e)}")
-    
+            if fact_check_result and fact_check_result.get('confidence', 0) < config_manager.fact_check.confidence_threshold:
+                validation_passed = False
+                self.logger.warning(f"Content failed fact-check: {fact_check_result.get('confidence', 0)}")
+        
+        # 2. Security scan
+        self.logger.info("🛡️ Performing security scan")
+        is_safe, threats = security_manager.scan_content_security(content)
+        metadata.security_scan_result = {'safe': is_safe, 'threats': threats}
+        
+        if not is_safe:
+            validation_passed = False
+            self.logger.warning(f"Content failed security scan: {threats}")
+        
+        # 3. Quality assessment
+        quality_score = await self._assess_content_quality(content, language, content_type)
+        metadata.quality_score = quality_score
+        
+        if quality_score < 0.6:  # Minimum quality threshold
+            validation_passed = False
+            self.logger.warning(f"Content quality too low: {quality_score}")
+        
+        # 4. Length validation
+        if len(content) > 280:
+            validation_passed = False
+            self.logger.warning(f"Content too long: {len(content)} characters")
+        
+        if not validation_passed:
+            return None, metadata
+        
+        # Update model performance tracking
+        await self._update_model_performance(model_used, True, quality_score)
+        
+        self.logger.info(f"✅ Content generated successfully: quality={quality_score:.2f}, model={model_used}")
+        return content, metadata
+
     async def _generate_with_optimal_model(self, topic: str, content_type: ContentType, 
-                                         language: str, mode: str) -> Tuple[Optional[str], str, float]:
+                                         language: str, mode: str) -> Tuple[Optional[str], str]:
         """Generate content using the optimal model based on performance and cost"""
         
         # Select optimal model
@@ -232,116 +234,90 @@ class EnhancedContentGenerator:
                 generation_time = (datetime.now() - start_time).total_seconds()
                 
                 if content and len(content.strip()) > 10:  # Valid content
-                    return content, model, generation_time
+                    return content, model
                 
             except Exception as e:
                 self.logger.warning(f"Model {model} failed: {e}")
                 self._update_model_performance(model, False, 0.0, 0.0)
         
-        return None, "none", 0.0
+        return None, "none"
     
-    async def _generate_with_model(self, model: str, topic: str, content_type: ContentType,
-                                 language: str, mode: str) -> Optional[str]:
-        """Generate content with specific model"""
+    async def _generate_with_model(self, model_name: str, topic: str, 
+                                 content_type: ContentType, language: str, mode: str) -> Optional[str]:
+        """Generate content with specific model and language support"""
         
-        # Create context-aware prompt
-        prompt = self._create_enhanced_prompt(topic, content_type, language, mode)
+        try:
+            if model_name == "grok":
+                return await self._generate_with_grok(topic, content_type, language, mode)
+            elif model_name == "claude":
+                return await self._generate_with_claude(topic, content_type, language, mode)
+            elif model_name == "openai":
+                return await self._generate_with_openai(topic, content_type, language, mode)
+            elif model_name == "gemini":
+                return await self._generate_with_gemini(topic, content_type, language, mode)
+            elif model_name == "sarvam":
+                return await self._generate_with_sarvam(topic, content_type, language, mode)
+            else:
+                self.logger.error(f"Unknown model: {model_name}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error generating with {model_name}: {str(e)}")
+            return None
+
+    def _create_enhanced_prompt(self, topic: str, content_type: ContentType, 
+                              language: str, mode: str) -> str:
+        """Create enhanced prompt with language-specific instructions"""
         
-        if model == "grok":
-            return await self._generate_with_grok(prompt)
-        elif model == "claude":
-            return await self._generate_with_claude(prompt)
-        elif model == "chatgpt":
-            return await self._generate_with_openai(prompt)
-        elif model == "gemini":
-            return await self._generate_with_gemini(prompt)
-        elif model == "sarvam":
-            return await self._generate_with_sarvam(prompt)
-        else:
-            raise ValueError(f"Unknown model: {model}")
-    
-    def _create_enhanced_prompt(self, topic: str, content_type: ContentType, language: str, mode: str) -> str:
-        """Create context-aware, ethical prompt for content generation"""
-        
-        # Base persona context
-        persona_context = f"""
-        You are Jawaharlal Nehru (1889-1964), India's first Prime Minister, writing in the modern era.
-        Your voice should reflect: {', '.join(self.historical_context['speaking_style']['characteristics'])}
-        
-        Key themes to potentially incorporate: {', '.join(self.historical_context['key_themes'][:3])}
-        """
-        
-        # Content type specific instructions
-        type_instructions = {
-            ContentType.SATIRICAL: "Write with gentle humor and wit, making thoughtful observations about modern life",
-            ContentType.INFORMATIVE: "Share knowledge or insights in an educational but accessible manner",
-            ContentType.REFLECTIVE: "Reflect philosophically on life, society, or human nature",
-            ContentType.CULTURAL: "Celebrate Indian culture, diversity, or traditions",
-            ContentType.HISTORICAL: "Draw parallels between historical events and contemporary situations"
+        # Language-specific instructions
+        language_instructions = {
+            "hi": {
+                "instruction": "कृपया हिंदी में एक उच्च गुणवत्ता का ट्वीट लिखें।",
+                "guidelines": "देवनागरी लिपि का उपयोग करें, सांस्कृतिक संवेदनशीलता बनाए रखें।",
+                "character_limit": "280 अक्षरों के भीतर रखें।"
+            },
+            "bho": {
+                "instruction": "कृपया भोजपुरी में एक प्रामाणिक ट्वीट लिखें।",
+                "guidelines": "भोजपुरी की मूल भावना और स्थानीय संदर्भ को बनाए रखें।",
+                "character_limit": "280 अक्षरों के भीतर रखें।"
+            },
+            "en": {
+                "instruction": "Please write a high-quality tweet in English.",
+                "guidelines": "Use proper grammar, maintain cultural sensitivity.",
+                "character_limit": "Keep within 280 characters."
+            }
         }
         
-        # Language specific instructions
-        if language == "hi":
-            language_instruction = """
-            Write in Hindi with:
-            - Natural, conversational tone
-            - Appropriate cultural context
-            - Emotional warmth typical of Nehru's style
-            - Simple yet elegant language
-            """
-        else:
-            language_instruction = """
-            Write in English with:
-            - Nehru's characteristic eloquence
-            - Philosophical depth
-            - Emotional resonance
-            - Accessible language for modern readers
-            """
+        lang_config = language_instructions.get(language, language_instructions["en"])
         
-        # Mode-specific tone
-        mode_instruction = "Write with a reflective, evening tone" if mode == "NIGHT" else "Write with an energetic, optimistic tone"
+        # Content type specific guidance
+        content_guidance = {
+            ContentType.SATIRICAL: "व्यंग्यात्मक लेकिन सम्मानजनक" if language in ["hi", "bho"] else "satirical but respectful",
+            ContentType.INFORMATIVE: "शिक्षाप्रद और तथ्यपरक" if language in ["hi", "bho"] else "educational and factual",
+            ContentType.REFLECTIVE: "चिंतनशील और गहरा" if language in ["hi", "bho"] else "thoughtful and profound",
+            ContentType.CULTURAL: "सांस्कृतिक और पारंपरिक" if language in ["hi", "bho"] else "cultural and traditional",
+            ContentType.HISTORICAL: "ऐतिहासिक और प्रेरणादायक" if language in ["hi", "bho"] else "historical and inspiring"
+        }
         
-        # Ethical guidelines
-        ethical_guidelines = """
-        ETHICAL REQUIREMENTS (MANDATORY):
-        - Promote unity, peace, and understanding
-        - Avoid divisive, hateful, or discriminatory content
-        - Respect all religions, communities, and individuals
-        - Focus on positive values and constructive ideas
-        - Fact-check any specific claims or statistics
-        - Maintain dignity and respect in all communications
-        """
+        prompt = f"""
+{lang_config['instruction']}
+
+विषय/Topic: {topic}
+शैली/Style: {content_guidance[content_type]}
+समय/Mode: {mode}
+
+दिशा-निर्देश/Guidelines:
+- {lang_config['guidelines']}
+- {lang_config['character_limit']}
+- तथ्यपरक और सत्यापित जानकारी का उपयोग करें / Use factual and verified information
+- सांस्कृतिक संवेदनशीलता बनाए रखें / Maintain cultural sensitivity
+- कोई भेदभावपूर्ण या आपत्तिजनक सामग्री न हो / No discriminatory or offensive content
+
+कृपया केवल ट्वीट का टेक्स्ट दें, कोई अतिरिक्त स्पष्टीकरण नहीं।
+Please provide only the tweet text, no additional explanation.
+"""
         
-        # Final prompt construction
-        if topic:
-            topic_instruction = f"Topic focus: {topic}"
-        else:
-            topic_instruction = "Choose an appropriate topic that resonates with current times while staying true to Nehru's values"
-        
-        full_prompt = f"""
-        {persona_context}
-        
-        {language_instruction}
-        
-        Content Type: {type_instructions.get(content_type, '')}
-        
-        {mode_instruction}
-        
-        {topic_instruction}
-        
-        {ethical_guidelines}
-        
-        Requirements:
-        - Maximum 280 characters for Twitter
-        - Natural, human-like expression
-        - No hashtags or excessive emojis
-        - Authentic to Nehru's voice and values
-        - Appropriate for public social media
-        
-        Generate the tweet now:
-        """
-        
-        return full_prompt
+        return prompt
     
     async def _generate_with_grok(self, prompt: str) -> Optional[str]:
         """Generate content using Grok (xAI)"""
@@ -500,55 +476,104 @@ class EnhancedContentGenerator:
             return best_model
         else:
             return preferred_models[0]
+
+    def _select_contextual_topic(self, content_type: ContentType, language: str, mode: str) -> str:
+        """Select contextually appropriate topic based on language and content type"""
+        
+        # Language-specific topics
+        if language == "hi":  # Hindi
+            topics_by_type = {
+                ContentType.SATIRICAL: ["सामाजिक मुद्दे", "राजनीतिक व्यंग्य", "दैनिक जीवन की समस्याएं"],
+                ContentType.INFORMATIVE: ["शिक्षा", "स्वास्थ्य", "तकनीक", "विज्ञान"],
+                ContentType.REFLECTIVE: ["जीवन दर्शन", "आत्म-चिंतन", "सामाजिक मूल्य"],
+                ContentType.CULTURAL: ["भारतीय संस्कृति", "त्योहार", "परंपराएं", "कला"],
+                ContentType.HISTORICAL: ["स्वतंत्रता संग्राम", "महान व्यक्तित्व", "ऐतिहासिक घटनाएं"]
+            }
+        elif language == "bho":  # Bhojpuri
+            topics_by_type = {
+                ContentType.SATIRICAL: ["गांव के मुद्दे", "स्थानीय राजनीति", "सामाजिक रीति-रिवाज"],
+                ContentType.INFORMATIVE: ["कृषि", "शिक्षा", "स्वास्थ्य", "रोजगार"],
+                ContentType.REFLECTIVE: ["जीवन के अनुभव", "पारंपरिक ज्ञान", "पारिवारिक मूल्य"],
+                ContentType.CULTURAL: ["भोजपुरी संस्कृति", "लोक गीत", "त्योहार", "पारंपरिक कलाएं"],
+                ContentType.HISTORICAL: ["क्षेत्रीय इतिहास", "स्थानीय नायक", "सांस्कृतिक विरासत"]
+            }
+        else:  # English
+            topics_by_type = {
+                ContentType.SATIRICAL: ["social issues", "modern life", "technology humor"],
+                ContentType.INFORMATIVE: ["education", "technology", "health", "science"],
+                ContentType.REFLECTIVE: ["life philosophy", "personal growth", "wisdom"],
+                ContentType.CULTURAL: ["diversity", "unity", "traditions", "heritage"],
+                ContentType.HISTORICAL: ["freedom struggle", "great personalities", "historical events"]
+            }
+        
+        # Select random topic from appropriate category
+        topics = topics_by_type.get(content_type, topics_by_type[ContentType.REFLECTIVE])
+        return random.choice(topics)
     
-    async def _assess_content_quality(self, content: str, content_type: ContentType, language: str) -> float:
-        """Assess content quality using multiple metrics"""
-        quality_factors = {}
+    async def _assess_content_quality(self, content: str, language: str, 
+                                    content_type: ContentType) -> float:
+        """Assess content quality with language-specific metrics"""
         
-        # Length appropriateness (Twitter limit)
-        if len(content) <= 280:
-            quality_factors['length'] = 1.0
-        elif len(content) <= 300:
-            quality_factors['length'] = 0.8
-        else:
-            quality_factors['length'] = 0.5
+        quality_score = 0.0
         
-        # Language appropriateness
+        # Basic length check (0.2 weight)
+        if 50 <= len(content) <= 280:
+            quality_score += 0.2
+        elif len(content) < 50:
+            quality_score += 0.1  # Too short
+        # Over 280 gets 0 points
+        
+        # Language-specific quality checks
         if language == "hi":
-            # Check for proper Hindi script and structure
-            hindi_chars = len(re.findall(r'[\u0900-\u097F]', content))
-            total_chars = len(content.replace(' ', ''))
-            if total_chars > 0:
-                quality_factors['language'] = min(1.0, hindi_chars / total_chars * 1.5)
-            else:
-                quality_factors['language'] = 0.0
-        else:
+            # Check for proper Devanagari script
+            devanagari_chars = sum(1 for char in content if '\u0900' <= char <= '\u097F')
+            if devanagari_chars / len(content) > 0.3:  # At least 30% Devanagari
+                quality_score += 0.2
+        
+        elif language == "bho":
+            # Check for Bhojpuri characteristics (mix of Devanagari and regional expressions)
+            devanagari_chars = sum(1 for char in content if '\u0900' <= char <= '\u097F')
+            if devanagari_chars / len(content) > 0.2:  # At least 20% Devanagari
+                quality_score += 0.2
+            
+            # Check for common Bhojpuri words/patterns
+            bhojpuri_indicators = ["के", "बा", "हs", "रहल", "करत", "भइल", "होखे"]
+            if any(indicator in content for indicator in bhojpuri_indicators):
+                quality_score += 0.1
+        
+        elif language == "en":
             # Check for proper English structure
-            english_words = len(re.findall(r'\b[A-Za-z]+\b', content))
-            quality_factors['language'] = min(1.0, english_words / 10)  # Normalize
+            words = content.split()
+            if len(words) >= 5:  # Minimum word count
+                quality_score += 0.2
+            
+            # Check for capitalization and punctuation
+            if content[0].isupper() and any(char in content for char in '.!?'):
+                quality_score += 0.1
         
-        # Coherence and readability
-        sentences = len(re.split(r'[.!?]+', content))
-        if sentences >= 1:
-            quality_factors['coherence'] = min(1.0, sentences / 3)  # Optimal 1-3 sentences
-        else:
-            quality_factors['coherence'] = 0.3
+        # Content relevance and coherence (0.3 weight)
+        # This would ideally use NLP models, but for now we use basic heuristics
+        words = content.split()
+        if len(words) >= 3:  # Minimum coherence
+            quality_score += 0.2
         
-        # Persona authenticity (basic keyword matching)
-        nehru_keywords = ['india', 'children', 'nation', 'future', 'democracy', 'unity', 'peace']
-        keyword_matches = sum(1 for keyword in nehru_keywords if keyword.lower() in content.lower())
-        quality_factors['authenticity'] = min(1.0, keyword_matches / 3)
+        # No repetitive patterns (0.1 weight)
+        word_variety = len(set(words)) / len(words) if words else 0
+        if word_variety > 0.7:  # Good word variety
+            quality_score += 0.1
         
-        # Calculate weighted score
-        weights = {
-            'length': 0.3,
-            'language': 0.25,
-            'coherence': 0.25,
-            'authenticity': 0.2
+        # Engagement potential (0.2 weight)
+        engagement_indicators = {
+            "hi": ["कैसे", "क्यों", "क्या", "जानिए", "समझिए"],
+            "bho": ["कइसे", "काहे", "का", "जानीं", "समझीं"],
+            "en": ["how", "why", "what", "discover", "learn", "amazing", "incredible"]
         }
         
-        total_score = sum(quality_factors[factor] * weight for factor, weight in weights.items())
-        return min(1.0, max(0.0, total_score))
+        indicators = engagement_indicators.get(language, engagement_indicators["en"])
+        if any(indicator.lower() in content.lower() for indicator in indicators):
+            quality_score += 0.1
+        
+        return min(quality_score, 1.0)  # Cap at 1.0
     
     def _update_model_performance(self, model: str, success: bool, quality: float, time: float):
         """Update model performance metrics"""
